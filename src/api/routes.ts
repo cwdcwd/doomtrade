@@ -23,6 +23,7 @@ import type { DecisionStore } from "../decision/decision-store.js";
 import type { TradeEngine } from "../engine/trade-engine.js";
 import type { Portfolio } from "../portfolio/portfolio.js";
 import type { Config } from "../config.js";
+import type { MarketDataService } from "../market/market.js";
 import {
   CreateDecisionBodySchema,
   ListDecisionsQuerySchema,
@@ -43,6 +44,8 @@ export interface AppState {
   currentMode: "sim" | "live";
   /** Timestamp when mode was last toggled — for cooldown enforcement */
   modeChangedAt: number;
+  /** Market data service — optional, may not be available without API keys */
+  marketData?: MarketDataService;
 }
 
 // ── Mode toggle cooldown (seconds) ──────────────────────────────
@@ -287,6 +290,57 @@ export function createApiRouter(state: AppState): Router {
           : "Sim mode active — paper trading",
       timestamp: new Date().toISOString(),
     });
+  });
+
+  // ── Market data ──────────────────────────────────────────────
+
+  router.get("/market/quote/:symbol", async (req: Request, res: Response) => {
+    if (!state.marketData) {
+      res.status(503).json({ error: "Market data service unavailable", mode: state.currentMode });
+      return;
+    }
+    try {
+      const symbol = String(req.params.symbol);
+      const quote = await state.marketData.getQuote(symbol);
+      res.json({ mode: state.currentMode, quote });
+    } catch (err) {
+      res.status(502).json({ error: "Failed to fetch quote", message: (err as Error).message, mode: state.currentMode });
+    }
+  });
+
+  router.get("/market/bars/:symbol", async (req: Request, res: Response) => {
+    if (!state.marketData) {
+      res.status(503).json({ error: "Market data service unavailable", mode: state.currentMode });
+      return;
+    }
+    try {
+      const symbol = String(req.params.symbol);
+      const timeframe = (req.query.timeframe as string) ?? "1Day";
+      const range = (req.query.range as string) ?? "30d";
+      const bars = await state.marketData.getBars(symbol, timeframe as "1Min" | "5Min" | "15Min" | "1Hour" | "1Day", range);
+      res.json({ mode: state.currentMode, symbol, timeframe, range, bars, count: bars.length });
+    } catch (err) {
+      res.status(502).json({ error: "Failed to fetch bars", message: (err as Error).message, mode: state.currentMode });
+    }
+  });
+
+  router.get("/market/snapshot", async (req: Request, res: Response) => {
+    if (!state.marketData) {
+      res.status(503).json({ error: "Market data service unavailable", mode: state.currentMode });
+      return;
+    }
+    try {
+      const symbolsParam = req.query.symbols as string;
+      if (!symbolsParam) {
+        res.status(400).json({ error: "Missing 'symbols' query parameter", mode: state.currentMode });
+        return;
+      }
+      const symbols = symbolsParam.split(",").map((s) => s.trim());
+      const snapshots = await state.marketData.getSnapshot(symbols);
+      res.json({ mode: state.currentMode, snapshots, count: snapshots.length });
+    } catch (err) {
+      res.status(502).json({ error: "Failed to fetch snapshots", message: (err as Error).message, mode: state.currentMode });
+    }
   });
 
   return router;
