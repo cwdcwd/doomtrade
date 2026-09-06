@@ -15,6 +15,10 @@
  *   GET  /api/portfolio
  *   GET  /api/portfolio/history
  *   GET  /api/positions
+ *   GET  /api/market/quote?symbol=BTC/USDT
+ *   GET  /api/market/bars?symbol=BTC/USDT&timeframe=1Day&range=3m
+ *   GET  /api/market/snapshot?symbols=BTC/USDT,ETH/USDT
+ *   GET  /api/research/analyze?symbol=BTC/USDT&timeframe=1Day&range=6m
  *   POST /api/mode
  */
 
@@ -24,6 +28,7 @@ import type { TradeEngine } from "../engine/trade-engine.js";
 import type { Portfolio } from "../portfolio/portfolio.js";
 import type { Config } from "../config.js";
 import type { MarketDataService } from "../market/market.js";
+import type { ResearchService } from "../research/research.js";
 import {
   CreateDecisionBodySchema,
   ListDecisionsQuerySchema,
@@ -32,6 +37,7 @@ import {
   ToggleModeBodySchema,
   ListTradesQuerySchema,
 } from "./schemas.js";
+import { z } from "zod";
 
 // ── App state container ─────────────────────────────────────────
 
@@ -46,6 +52,8 @@ export interface AppState {
   modeChangedAt: number;
   /** Market data service — optional, may not be available without API keys */
   marketData?: MarketDataService;
+  /** Research service for technical analysis */
+  research?: ResearchService;
 }
 
 // ── Mode toggle cooldown (seconds) ──────────────────────────────
@@ -242,6 +250,98 @@ export function createApiRouter(state: AppState): Router {
       });
     } catch (err) {
       res.status(500).json({ error: "Failed to get positions", message: (err as Error).message });
+    }
+  });
+
+  // ── Market data (public crypto, no API keys needed) ───────────
+
+  const QuoteQuerySchema = z.object({
+    symbol: z.string().min(1),
+  });
+
+  const BarsQuerySchema = z.object({
+    symbol: z.string().min(1),
+    timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
+    range: z.string().default("1m"),
+  });
+
+  router.get("/market/quote", async (req: Request, res: Response) => {
+    if (!state.marketData) {
+      res.status(503).json({ error: "Market data service not available" });
+      return;
+    }
+    const parsed = QuoteQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+      return;
+    }
+    try {
+      const quote = await state.marketData.getQuote(parsed.data.symbol);
+      res.json({ mode: state.currentMode, quote });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch quote", message: (err as Error).message });
+    }
+  });
+
+  router.get("/market/bars", async (req: Request, res: Response) => {
+    if (!state.marketData) {
+      res.status(503).json({ error: "Market data service not available" });
+      return;
+    }
+    const parsed = BarsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+      return;
+    }
+    try {
+      const bars = await state.marketData.getBars(parsed.data.symbol, parsed.data.timeframe, parsed.data.range);
+      res.json({ mode: state.currentMode, bars, count: bars.length });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch bars", message: (err as Error).message });
+    }
+  });
+
+  router.get("/market/snapshot", async (req: Request, res: Response) => {
+    if (!state.marketData) {
+      res.status(503).json({ error: "Market data service not available" });
+      return;
+    }
+    const symbols = String(req.query.symbols ?? "").split(",").filter(Boolean);
+    if (symbols.length === 0) {
+      res.status(400).json({ error: "symbols query parameter required (comma-separated)" });
+      return;
+    }
+    try {
+      const snapshots = await state.marketData.getSnapshot(symbols);
+      res.json({ mode: state.currentMode, snapshots, count: snapshots.length });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to fetch snapshots", message: (err as Error).message });
+    }
+  });
+
+  // ── Research / Technical analysis ─────────────────────────────
+
+  const AnalyzeQuerySchema = z.object({
+    symbol: z.string().min(1),
+    timeframe: z.enum(["1Min", "5Min", "15Min", "1Hour", "1Day"]).default("1Day"),
+    range: z.string().default("6m"),
+  });
+
+  router.get("/research/analyze", async (req: Request, res: Response) => {
+    if (!state.research) {
+      res.status(503).json({ error: "Research service not available" });
+      return;
+    }
+    const parsed = AnalyzeQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+      return;
+    }
+    try {
+      const analysis = await state.research.analyze(parsed.data.symbol, parsed.data.timeframe, parsed.data.range);
+      res.json({ mode: state.currentMode, analysis });
+    } catch (err) {
+      res.status(500).json({ error: "Analysis failed", message: (err as Error).message });
     }
   });
 

@@ -14,8 +14,9 @@ import { SimulatedExchange } from "./executor/simulated.js";
 import { TradeEngine } from "./engine/trade-engine.js";
 import { Portfolio } from "./portfolio/portfolio.js";
 import { createApiRouter } from "./api/routes.js";
+import { createPublicCryptoMarketData, createMarketDataService } from "./market/market.js";
+import { ResearchService } from "./research/research.js";
 import type { Executor } from "./executor/executor.js";
-import { createMarketDataService, isCryptoSymbol } from "./market/market.js";
 import type { PriceProvider } from "./engine/trade-engine.js";
 
 /**
@@ -95,6 +96,22 @@ async function main() {
     initialCapital: config.simStartingBalance,
   });
 
+  // Market data: in sim mode, use public CCXT for crypto (no API keys needed).
+  // In live mode, use full routing (Alpaca for stocks, CCXT for crypto).
+  const marketData = config.tradeMode === "live"
+    ? createMarketDataService({
+        alpacaKeyId: config.alpacaKeyId,
+        alpacaSecretKey: config.alpacaSecretKey,
+        alpacaPaper: config.alpacaPaper,
+        ccxtExchange: config.ccxtExchange,
+        ccxtApiKey: config.ccxtApiKey,
+        ccxtApiSecret: config.ccxtApiSecret,
+      })
+    : createPublicCryptoMarketData(config.ccxtExchange);
+
+  // Research service for technical analysis (SMA, RSI)
+  const research = new ResearchService(marketData);
+
   // App state (mutable for mode toggle)
   const state = {
     decisionStore,
@@ -104,6 +121,7 @@ async function main() {
     currentMode: config.tradeMode as "sim" | "live",
     modeChangedAt: Date.now(),
     marketData,
+    research,
   };
 
   const app = express();
