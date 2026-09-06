@@ -15,21 +15,22 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@alpacahq/alpaca-trade-api": "^4.0.1",
+    "@cwdcwd/agent-bridge": "github:cwdcwd/agent-bridge",
+    "ccxt": "^4.5.0",
     "express": "^4.21.0",
     "sql.js": "^1.13.0",
-    "zod": "^3.23.0",
-    "@alpacahq/alpaca-trade-api": "^4.0.1",
-    "ccxt": "^4.5.0"
+    "zod": "^3.23.0"
   },
   "devDependencies": {
-    "typescript": "^5.5.0",
-    "vitest": "^2.1.0",
-    "@types/node": "^22.0.0",
     "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
     "@types/sql.js": "^1.4.0",
-    "tsx": "^4.19.0",
+    "@types/supertest": "^6.0.0",
     "supertest": "^7.0.0",
-    "@types/supertest": "^6.0.0"
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0"
   },
   "engines": {
     "node": ">=20"
