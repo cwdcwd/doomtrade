@@ -9,4 +9,4 @@ coverage/
 .env
 *.db
 *.sqlite
-data/
+data/package-lock.json
