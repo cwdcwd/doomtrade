@@ -69,28 +69,9 @@ async function main() {
 
   // Initialize executor (sim or live based on mode)
   const executor = await createExecutor(config, db);
-
-  // Initialize market data service for price fetching
-  const marketData = createMarketDataService({
-    alpacaKeyId: config.alpacaKeyId,
-    alpacaSecretKey: config.alpacaSecretKey,
-    alpacaPaper: config.alpacaPaper,
-    ccxtExchange: config.ccxtExchange,
-    ccxtApiKey: config.ccxtApiKey,
-    ccxtApiSecret: config.ccxtApiSecret,
-  });
-
-  // Price provider wraps the market data service for the trade engine
-  const priceProvider: PriceProvider = {
-    async getQuote(symbol: string): Promise<number> {
-      const quote = await marketData.getQuote(symbol);
-      return quote.price;
-    },
   };
 
   // Initialize services
-  const decisionStore = new DecisionStore(db);
-  const tradeEngine = new TradeEngine(db, executor, config, priceProvider);
   const portfolio = new Portfolio(db, executor, {
     mode: config.tradeMode,
     initialCapital: config.simStartingBalance,
@@ -111,6 +92,18 @@ async function main() {
 
   // Research service for technical analysis (SMA, RSI)
   const research = new ResearchService(marketData);
+
+  // Price provider wraps the market data service for the trade engine
+  const priceProvider: PriceProvider = {
+    async getQuote(symbol: string): Promise<number> {
+      const quote = await marketData.getQuote(symbol);
+      return quote.price;
+    },
+  };
+
+  // Initialize services
+  const decisionStore = new DecisionStore(db);
+  const tradeEngine = new TradeEngine(db, executor, config, priceProvider);
 
   // App state (mutable for mode toggle)
   const state = {

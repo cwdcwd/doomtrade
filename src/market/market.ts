@@ -132,3 +132,32 @@ export function createMarketDataService(config: MarketDataConfig): MarketDataSer
     },
   };
 }
+
+/**
+ * Create a public crypto-only market data service — no API keys needed.
+ * Uses CCXT's public endpoints (fetchTicker, fetchOHLCV) which work
+ * without authentication on most exchanges.
+ */
+export function createPublicCryptoMarketData(exchangeId: string = "binance"): MarketDataService {
+  let ccxtAdapter: MarketDataService | undefined;
+
+  async function getCCXT(): Promise<MarketDataService> {
+    if (!ccxtAdapter) {
+      const { CCXTMarketData } = await import("./ccxt-data.js");
+      ccxtAdapter = new CCXTMarketData(exchangeId);
+    }
+    return ccxtAdapter;
+  }
+
+  return {
+    async getQuote(symbol: string): Promise<Quote> {
+      return (await getCCXT()).getQuote(symbol);
+    },
+    async getBars(symbol: string, timeframe: Timeframe, range: string): Promise<Bar[]> {
+      return (await getCCXT()).getBars(symbol, timeframe, range);
+    },
+    async getSnapshot(symbols: string[]): Promise<Snapshot[]> {
+      return (await getCCXT()).getSnapshot(symbols);
+    },
+  };
+}
