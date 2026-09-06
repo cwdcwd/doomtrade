@@ -1,0 +1,7 @@
+{
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "doomtrade",
+  "project_id": "7fcf3267-2212-4875-95b8-ba767d9cbf8d"
+}
