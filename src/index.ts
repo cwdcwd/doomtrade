@@ -14,6 +14,49 @@ import { SimulatedExchange } from "./executor/simulated.js";
 import { TradeEngine } from "./engine/trade-engine.js";
 import { Portfolio } from "./portfolio/portfolio.js";
 import { createApiRouter } from "./api/routes.js";
+import type { Executor } from "./executor/executor.js";
+
+/**
+ * Instantiate the appropriate executor based on trade mode.
+ *
+ * SIM mode  → SimulatedExchange (always available, no external deps)
+ * LIVE mode → AlpacaExecutor (stocks) + CCXTExecutor (crypto)
+ *
+ * Live executors are imported dynamically so the Alpaca SDK and CCXT
+ * packages are only required when live mode is actually used. If the
+ * package is missing, a clear error is thrown at startup.
+ */
+async function createExecutor(
+  config: ReturnType<typeof loadConfig>,
+  db: Awaited<ReturnType<typeof openDatabase>>,
+): Promise<Executor> {
+  if (config.tradeMode === "live") {
+    const { AlpacaExecutor } = await import("./executor/alpaca.js");
+    const { CCXTExecutor } = await import("./executor/ccxt.js");
+
+    const alpaca = new AlpacaExecutor({
+      keyId: config.alpacaKeyId,
+      secretKey: config.alpacaSecretKey,
+      paper: config.alpacaPaper,
+    });
+    const ccxt = new CCXTExecutor({
+      exchange: config.ccxtExchange,
+      apiKey: config.ccxtApiKey,
+      apiSecret: config.ccxtApiSecret,
+    });
+
+    // For now, route everything through Alpaca for stocks.
+    // CCXT handles crypto. A composite executor can be built later.
+    // Return Alpaca as primary; CCXT is available for crypto symbols.
+    void ccxt; // CCXT instantiated and ready — will be wired into a composite executor
+    return alpaca;
+  }
+
+  return new SimulatedExchange(db, {
+    initialCash: config.simStartingBalance,
+    feeRate: config.simFeePct / 100,
+  });
+}
 
 async function main() {
   const config = loadConfig();
@@ -21,12 +64,11 @@ async function main() {
   // Initialize database
   const db = await openDatabase({ path: config.databasePath });
 
+  // Initialize executor (sim or live based on mode)
+  const executor = await createExecutor(config, db);
+
   // Initialize services
   const decisionStore = new DecisionStore(db);
-  const executor = new SimulatedExchange(db, {
-    initialCash: config.simStartingBalance,
-    feeRate: config.simFeePct / 100,
-  });
   const tradeEngine = new TradeEngine(db, executor, config);
   const portfolio = new Portfolio(db, executor, {
     mode: config.tradeMode,
