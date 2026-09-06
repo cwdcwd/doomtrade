@@ -1,0 +1,37 @@
+{
+  "name": "doomtrade",
+  "version": "0.1.0",
+  "description": "Agent-managed stock and crypto trading platform",
+  "license": "MIT",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^4.21.0",
+    "sql.js": "^1.13.0",
+    "zod": "^3.23.0",
+    "@alpacahq/alpaca-trade-api": "^4.0.1",
+    "ccxt": "^4.5.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0",
+    "vitest": "^2.1.0",
+    "@types/node": "^22.0.0",
+    "@types/express": "^5.0.0",
+    "@types/sql.js": "^1.4.0",
+    "tsx": "^4.19.0",
+    "supertest": "^7.0.0",
+    "@types/supertest": "^6.0.0"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
