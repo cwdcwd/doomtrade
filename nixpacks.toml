@@ -1,0 +1,14 @@
+# Nixpacks build config for Railway
+# Docs: https://nixpacks.com/docs/configuration/file
+
+[phases.install]
+# Install all dependencies, then build agent-bridge (git dep needs prepare)
+cmds = ["npm install", "cd node_modules/@cwdcwd/agent-bridge && npm run build"]
+
+[phases.build]
+# Compile TypeScript to dist/
+cmds = ["npm run build"]
+
+[start]
+# Start the server (Railway sets PORT automatically)
+cmd = "node dist/index.js"

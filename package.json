@@ -16,7 +16,7 @@
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^4.0.1",
-    "@cwdcwd/agent-bridge": "github:cwdcwd/agent-bridge",
+    "@cwdcwd/agent-bridge": "git+https://github.com/cwdcwd/agent-bridge.git",
     "ccxt": "^4.5.0",
     "express": "^4.21.0",
     "sql.js": "^1.13.0",
@@ -34,5 +34,11 @@
   },
   "engines": {
     "node": ">=20"
+  },
+  "allowScripts": {
+    "ccxt": true,
+    "esbuild": true,
+    "bufferutil": true,
+    "@cwdcwd/agent-bridge": true
   }
 }
