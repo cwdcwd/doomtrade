@@ -69,7 +69,6 @@ async function main() {
 
   // Initialize executor (sim or live based on mode)
   const executor = await createExecutor(config, db);
-  };
 
   // Initialize services
   const portfolio = new Portfolio(db, executor, {
@@ -121,6 +120,9 @@ async function main() {
 
   // Middleware
   app.use(express.json());
+
+  // Serve dashboard static files
+  app.use(express.static("public"));
 
   // Health check — used by Railway for deployment healthchecks
   app.get("/health", (_req, res) => {

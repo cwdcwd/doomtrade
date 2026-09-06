@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DoomTrade Dashboard</title>
+  <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.3/bundles/datastar.js"></script>
+  <style>
+    :root {
+      --bg: #0d1117;
+      --card: #161b22;
+      --border: #30363d;
+      --text: #e6edf3;
+      --muted: #8b949e;
+      --green: #3fb950;
+      --red: #f85149;
+      --blue: #58a6ff;
+      --yellow: #d29922;
+      --purple: #bc8cff;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+      padding: 20px;
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+    h1 { font-size: 24px; margin-bottom: 4px; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .mode-badge {
+      padding: 4px 12px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 700;
+      text-transform: uppercase;
+    }
+    .mode-sim { background: var(--yellow); color: #000; }
+    .mode-live { background: var(--red); color: #fff; animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 16px;
+    }
+    .card-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .card-value { font-size: 28px; font-weight: 700; }
+    .card-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .positive { color: var(--green); }
+    .negative { color: var(--red); }
+    table { width: 100%; border-collapse: collapse; font-size: 14px; }
+    th { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px; text-transform: uppercase; }
+    td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
+    tr:hover { background: rgba(255,255,255,0.03); }
+    .section { margin-bottom: 32px; }
+    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
+    .rationale { color: var(--muted); font-style: italic; font-size: 13px; }
+    .confidence { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
+    .conf-high { background: rgba(63,185,80,0.2); color: var(--green); }
+    .conf-med { background: rgba(210,153,34,0.2); color: var(--yellow); }
+    .conf-low { background: rgba(248,81,73,0.2); color: var(--red); }
+    .status-filled { color: var(--green); }
+    .status-rejected { color: var(--red); }
+    .status-pending { color: var(--yellow); }
+    #equity-chart { width: 100%; height: 200px; }
+    .empty { color: var(--muted); padding: 24px; text-align: center; }
+    .agent-tag { color: var(--purple); font-size: 12px; }
+    .refresh-indicator { font-size: 12px; color: var(--muted); }
+    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 4px; }
+  </style>
+</head>
+<body>
+  <div data-signals="{mode: '...', equity: '...', cash: '...', positionsValue: '...', pnlTotal: '...', pnlPct: '...', exposure: '...', positionCount: '...', lastUpdate: '...', positionsHtml: '', decisionsHtml: '', tradesHtml: '', equityPoints: ''}">
+
+  <!-- Header -->
+  <div class="header">
+    <div>
+      <h1>DoomTrade</h1>
+      <div class="refresh-indicator">
+        <span class="dot"></span>
+        <span data-text="$lastUpdate">Loading...</span>
+      </div>
+    </div>
+    <div data-show="$mode === 'live'">
+      <span class="mode-badge mode-live">LIVE</span>
+    </div>
+    <div data-show="$mode !== 'live'">
+      <span class="mode-badge mode-sim">SIM</span>
+    </div>
+  </div>
+
+  <!-- Portfolio Summary -->
+  <div class="grid">
+    <div class="card">
+      <div class="card-label">Equity</div>
+      <div class="card-value" data-text="'$' + $equity"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Cash</div>
+      <div class="card-value" data-text="'$' + $cash"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Positions Value</div>
+      <div class="card-value" data-text="'$' + $positionsValue"></div>
+      <div class="card-sub" data-text="$positionCount + ' open'"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Total P&L</div>
+      <div class="card-value" data-text="'$' + $pnlTotal" data-class:positive="$pnlPct >= 0" data-class:negative="$pnlPct < 0"></div>
+      <div class="card-sub" data-text="($pnlPct + '%')" data-class:positive="$pnlPct >= 0" data-class:negative="$pnlPct < 0"></div>
+    </div>
+    <div class="card">
+      <div class="card-label">Exposure</div>
+      <div class="card-value" data-text="$exposure + '%'"></div>
+    </div>
+  </div>
+
+  <!-- Equity Chart -->
+  <div class="section">
+    <div class="section-title">Equity Curve</div>
+    <div class="card">
+      <canvas id="equity-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Open Positions -->
+  <div class="section">
+    <div class="section-title">Open Positions</div>
+    <div class="card">
+      <div data-text="$positionsHtml" data-computed="positionsHtmlDisplay($positionsHtml)"></div>
+    </div>
+  </div>
+
+  <!-- Recent Decisions -->
+  <div class="section">
+    <div class="section-title">Recent Decisions</div>
+    <div class="card">
+      <div data-text="$decisionsHtml" data-computed="decisionsHtmlDisplay($decisionsHtml)"></div>
+    </div>
+  </div>
+
+  <!-- Recent Trades -->
+  <div class="section">
+    <div class="section-title">Recent Trades</div>
+    <div class="card">
+      <div data-text="$tradesHtml" data-computed="tradesHtmlDisplay($tradesHtml)"></div>
+    </div>
+  </div>
+
+  </div>
+
+  <script>
+    // Poll the API every 5 seconds and update signals
+    async function fetchDashboard() {
+      try {
+        const [portResp, posResp, decResp, tradeResp, histResp] = await Promise.all([
+          fetch('/api/portfolio'),
+          fetch('/api/positions'),
+          fetch('/api/decisions?limit=10'),
+          fetch('/api/trades?limit=10'),
+          fetch('/api/portfolio/history'),
+        ]);
+
+        const port = await portResp.json();
+        const pos = await posResp.json();
+        const dec = await decResp.json();
+        const trades = await tradeResp.json();
+        const hist = await histResp.json();
+
+        // Update signals
+        const signals = {
+          mode: port.mode || 'sim',
+          equity: (port.portfolio?.equity || 0).toFixed(2),
+          cash: (port.portfolio?.cash || 0).toFixed(2),
+          positionsValue: (port.portfolio?.positionsValue || 0).toFixed(2),
+          pnlTotal: (port.pnl?.total || 0).toFixed(2),
+          pnlPct: (port.pnl?.totalPct || 0).toFixed(2),
+          exposure: (port.portfolio?.exposurePct || 0).toFixed(2),
+          positionCount: port.portfolio?.positionCount || 0,
+          lastUpdate: new Date().toLocaleTimeString(),
+          positionsHtml: renderPositions(pos.positions || []),
+          decisionsHtml: renderDecisions(dec.decisions || []),
+          tradesHtml: renderTrades(trades.trades || []),
+          equityPoints: JSON.stringify(hist.history || []),
+        };
+
+        // Patch signals into Datastar
+        const ds = document.querySelector('[data-signals]');
+        for (const [k, v] of Object.entries(signals)) {
+          ds.setAttribute('data-signals:' + k, JSON.stringify(v));
+        }
+
+        // Draw equity chart
+        drawEquityChart(JSON.parse(signals.equityPoints));
+      } catch (e) {
+        console.error('Dashboard fetch error:', e);
+        const ds = document.querySelector('[data-signals]');
+        ds.setAttribute('data-signals:lastUpdate', JSON.stringify('Error: ' + e.message));
+      }
+    }
+
+    function renderPositions(positions) {
+      if (!positions.length) return '<div class="empty">No open positions</div>';
+      let html = '<table><tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Current</th><th>P&L</th></tr>';
+      for (const p of positions) {
+        const pnlClass = (p.unrealizedPnl || 0) >= 0 ? 'positive' : 'negative';
+        const pnlStr = (p.unrealizedPnl || 0) >= 0 ? '+' : '';
+        html += '<tr><td><strong>' + (p.symbol||'') + '</strong></td><td>' + (p.side||'') + '</td><td>' + (p.quantity||0) + '</td><td>$' + (p.avgEntryPrice||0).toFixed(2) + '</td><td>$' + (p.currentPrice||p.avgEntryPrice||0).toFixed(2) + '</td><td class="' + pnlClass + '">' + pnlStr + '$' + (p.unrealizedPnl||0).toFixed(2) + '</td></tr>';
+      }
+      html += '</table>';
+      return html;
+    }
+
+    function renderDecisions(decisions) {
+      if (!decisions.length) return '<div class="empty">No decisions yet</div>';
+      let html = '<table><tr><th>Time</th><th>Agent</th><th>Action</th><th>Symbol</th><th>Qty</th><th>Price</th><th>Conf</th><th>Rationale</th></tr>';
+      for (const d of decisions) {
+        const time = new Date(d.timestamp).toLocaleTimeString();
+        const confClass = d.confidence >= 7 ? 'conf-high' : d.confidence >= 4 ? 'conf-med' : 'conf-low';
+        html += '<tr><td>' + time + '</td><td class="agent-tag">' + (d.agent||'') + '</td><td><strong>' + (d.action||'').toUpperCase() + '</strong></td><td>' + (d.symbol||'') + '</td><td>' + (d.quantity||0) + '</td><td>$' + (d.priceAtDecision||0).toFixed(2) + '</td><td><span class="confidence ' + confClass + '">' + (d.confidence||0) + '/10</span></td><td class="rationale">' + (d.rationale||'') + '</td></tr>';
+      }
+      html += '</table>';
+      return html;
+    }
+
+    function renderTrades(trades) {
+      if (!trades.length) return '<div class="empty">No trades yet</div>';
+      let html = '<table><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill</th><th>Fee</th><th>Status</th></tr>';
+      for (const t of trades) {
+        const time = new Date(t.timestamp).toLocaleTimeString();
+        const statusClass = 'status-' + (t.status || 'pending');
+        html += '<tr><td>' + time + '</td><td><strong>' + (t.symbol||'') + '</strong></td><td>' + (t.side||'').toUpperCase() + '</td><td>' + (t.quantity||0) + '</td><td>$' + (t.fillPrice||0).toFixed(2) + '</td><td>$' + (t.fee||0).toFixed(2) + '</td><td class="' + statusClass + '">' + (t.status||'') + '</td></tr>';
+      }
+      html += '</table>';
+      return html;
+    }
+
+    function drawEquityChart(points) {
+      if (!points || points.length < 2) return;
+      const canvas = document.getElementById('equity-chart');
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.offsetWidth;
+      const h = canvas.height = 200;
+
+      const values = points.map(p => p.equity || p.value || 0);
+      const min = Math.min(...values);
+      const max = Math.max(...values);
+      const range = max - min || 1;
+
+      ctx.clearRect(0, 0, w, h);
+      ctx.strokeStyle = '#30363d';
+      ctx.lineWidth = 1;
+      // Grid lines
+      for (let i = 0; i <= 4; i++) {
+        const y = (h / 4) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Equity line
+      ctx.strokeStyle = '#58a6ff';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      for (let i = 0; i < values.length; i++) {
+        const x = (w / (values.length - 1)) * i;
+        const y = h - ((values[i] - min) / range) * (h - 20) - 10;
+        if (i === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+
+      // Fill under line
+      ctx.lineTo(w, h);
+      ctx.lineTo(0, h);
+      ctx.closePath();
+      ctx.fillStyle = 'rgba(88, 166, 255, 0.1)';
+      ctx.fill();
+
+      // Labels
+      ctx.fillStyle = '#8b949e';
+      ctx.font = '11px sans-serif';
+      ctx.fillText('$' + max.toFixed(0), 4, 14);
+      ctx.fillText('$' + min.toFixed(0), 4, h - 4);
+    }
+
+    // Initial fetch + poll
+    fetchDashboard();
+    setInterval(fetchDashboard, 5000);
+  </script>
+</body>
+</html>
