@@ -87,40 +87,46 @@ export function createMarketDataService(config: MarketDataConfig): MarketDataSer
   let alpacaAdapter: MarketDataService | undefined;
   let ccxtAdapter: MarketDataService | undefined;
 
-  function getAlpaca(): MarketDataService {
+  async function getAlpaca(): Promise<MarketDataService> {
     if (!alpacaAdapter) {
-      const { AlpacaMarketData } = require("./alpaca-data.js");
+      const { AlpacaMarketData } = await import("./alpaca-data.js");
       alpacaAdapter = new AlpacaMarketData(config.alpacaKeyId, config.alpacaSecretKey, config.alpacaPaper);
     }
-    return alpacaAdapter!;
+    return alpacaAdapter;
   }
 
-  function getCCXT(): MarketDataService {
+  async function getCCXT(): Promise<MarketDataService> {
     if (!ccxtAdapter) {
-      const { CCXTMarketData } = require("./ccxt-data.js");
+      const { CCXTMarketData } = await import("./ccxt-data.js");
       ccxtAdapter = new CCXTMarketData(config.ccxtExchange, config.ccxtApiKey, config.ccxtApiSecret);
     }
-    return ccxtAdapter!;
+    return ccxtAdapter;
   }
 
-  function route(symbol: string): MarketDataService {
+  async function route(symbol: string): Promise<MarketDataService> {
     return isCryptoSymbol(symbol) ? getCCXT() : getAlpaca();
   }
 
   return {
     async getQuote(symbol: string): Promise<Quote> {
-      return route(symbol).getQuote(symbol);
+      return (await route(symbol)).getQuote(symbol);
     },
     async getBars(symbol: string, timeframe: Timeframe, range: string): Promise<Bar[]> {
-      return route(symbol).getBars(symbol, timeframe, range);
+      return (await route(symbol)).getBars(symbol, timeframe, range);
     },
     async getSnapshot(symbols: string[]): Promise<Snapshot[]> {
       const stockSymbols = symbols.filter((s) => isStockSymbol(s));
       const cryptoSymbols = symbols.filter((s) => isCryptoSymbol(s));
       const results: Snapshot[] = [];
 
-      if (stockSymbols.length > 0) results.push(...await getAlpaca().getSnapshot(stockSymbols));
-      if (cryptoSymbols.length > 0) results.push(...await getCCXT().getSnapshot(cryptoSymbols));
+      if (stockSymbols.length > 0) {
+        const alpaca = await getAlpaca();
+        results.push(...await alpaca.getSnapshot(stockSymbols));
+      }
+      if (cryptoSymbols.length > 0) {
+        const ccxt = await getCCXT();
+        results.push(...await ccxt.getSnapshot(cryptoSymbols));
+      }
 
       return results;
     },
