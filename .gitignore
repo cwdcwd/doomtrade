@@ -10,3 +10,8 @@ coverage/
 *.db
 *.sqlite
 data/package-lock.json
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+.beads-credential-key
+.beads/proxieddb/
