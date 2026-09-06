@@ -103,6 +103,7 @@ async function main() {
     config,
     currentMode: config.tradeMode as "sim" | "live",
     modeChangedAt: Date.now(),
+    marketData,
   };
 
   const app = express();
