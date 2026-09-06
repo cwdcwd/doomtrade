@@ -84,15 +84,15 @@ export interface MarketDataConfig {
  */
 export function createMarketDataService(config: MarketDataConfig): MarketDataService {
   // Lazy-load adapters so missing API keys don't crash at startup
-  let alpacaAdapter: MarketDataService | null = null;
-  let ccxtAdapter: MarketDataService | null = null;
+  let alpacaAdapter: MarketDataService | undefined;
+  let ccxtAdapter: MarketDataService | undefined;
 
   function getAlpaca(): MarketDataService {
     if (!alpacaAdapter) {
       const { AlpacaMarketData } = require("./alpaca-data.js");
       alpacaAdapter = new AlpacaMarketData(config.alpacaKeyId, config.alpacaSecretKey, config.alpacaPaper);
     }
-    return alpacaAdapter;
+    return alpacaAdapter!;
   }
 
   function getCCXT(): MarketDataService {
@@ -100,7 +100,7 @@ export function createMarketDataService(config: MarketDataConfig): MarketDataSer
       const { CCXTMarketData } = require("./ccxt-data.js");
       ccxtAdapter = new CCXTMarketData(config.ccxtExchange, config.ccxtApiKey, config.ccxtApiSecret);
     }
-    return ccxtAdapter;
+    return ccxtAdapter!;
   }
 
   function route(symbol: string): MarketDataService {

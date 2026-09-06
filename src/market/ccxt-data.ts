@@ -5,14 +5,14 @@
  * from 100+ crypto exchanges using a unified API.
  */
 
-import ccxt from "ccxt";
+import ccxt, { type Exchange } from "ccxt";
 import type { MarketDataService, Quote, Bar, Snapshot, Timeframe } from "./market.js";
 
 export class CCXTMarketData implements MarketDataService {
-  private exchange: ccxt.Exchange;
+  private exchange: Exchange;
 
   constructor(exchangeId: string, apiKey: string, apiSecret: string) {
-    const ExchangeClass = (ccxt as unknown as Record<string, typeof ccxt.Exchange>)[exchangeId];
+    const ExchangeClass = (ccxt as unknown as Record<string, new (config?: Record<string, unknown>) => Exchange>)[exchangeId];
     if (!ExchangeClass) throw new Error(`Unknown exchange: ${exchangeId}`);
 
     this.exchange = new ExchangeClass({
@@ -48,14 +48,14 @@ export class CCXTMarketData implements MarketDataService {
 
     const ohlcv = await this.exchange.fetchOHLCV(symbol, tfMap[timeframe], since);
 
-    return ohlcv.map((candle) => ({
+    return ohlcv.map((candle): Bar => ({
       symbol,
-      timestamp: new Date(candle[0]).toISOString(),
-      open: candle[1],
-      high: candle[2],
-      low: candle[3],
-      close: candle[4],
-      volume: candle[5],
+      timestamp: new Date(candle[0] ?? Date.now()).toISOString(),
+      open: Number(candle[1] ?? 0),
+      high: Number(candle[2] ?? 0),
+      low: Number(candle[3] ?? 0),
+      close: Number(candle[4] ?? 0),
+      volume: Number(candle[5] ?? 0),
       source: "ccxt" as const,
     }));
   }

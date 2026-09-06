@@ -4,7 +4,7 @@
  * Wraps @alpacahq/alpaca-trade-api v4 to fetch quotes, bars, and snapshots.
  */
 
-import { Alpaca, TimeFrame } from "@alpacahq/alpaca-trade-api";
+import { Alpaca, timeFrame, TimeFrameUnit } from "@alpacahq/alpaca-trade-api";
 import type { MarketDataService, Quote, Bar, Snapshot, Timeframe } from "./market.js";
 
 export class AlpacaMarketData implements MarketDataService {
@@ -19,16 +19,17 @@ export class AlpacaMarketData implements MarketDataService {
   }
 
   async getQuote(symbol: string): Promise<Quote> {
-    const trade = await this.client.marketData.getStockTradesLatest({
-      symbols: [symbol],
+    const trades = await this.client.marketData.getStockTradesFor(symbol, {
+      start: new Date(Date.now() - 60_000),
+      end: new Date(),
     });
-    const data = trade.get(symbol);
-    if (!data) throw new Error(`No quote data for ${symbol}`);
+    const trade = trades[trades.length - 1];
+    if (!trade) throw new Error(`No quote data for ${symbol}`);
 
     return {
       symbol,
-      price: data.p,
-      timestamp: new Date(data.t).toISOString(),
+      price: trade.price,
+      timestamp: new Date(trade.timestamp).toISOString(),
       source: "alpaca",
     };
   }
@@ -38,50 +39,61 @@ export class AlpacaMarketData implements MarketDataService {
     const start = new Date();
     start.setDate(start.getDate() - days);
 
-    const tfMap: Record<Timeframe, TimeFrame> = {
-      "1Min": TimeFrame.Minute,
-      "5Min": TimeFrame.Min5,
-      "15Min": TimeFrame.Min15,
-      "1Hour": TimeFrame.Hour,
-      "1Day": TimeFrame.Day,
-    };
-
+    const tf = timeframeToAlpaca(timeframe);
     const bars = await this.client.marketData.getStockBarsFor(symbol, {
-      timeframe: tfMap[timeframe],
+      timeframe: tf,
       start,
     });
 
     return bars.map((bar) => ({
       symbol,
-      timestamp: new Date(bar.t).toISOString(),
-      open: bar.o,
-      high: bar.h,
-      low: bar.l,
-      close: bar.c,
-      volume: bar.v,
+      timestamp: new Date(bar.timestamp).toISOString(),
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: bar.volume,
       source: "alpaca" as const,
     }));
   }
 
   async getSnapshot(symbols: string[]): Promise<Snapshot[]> {
-    const snapshots = await this.client.marketData.getStocksSnapshots({ symbols: symbols.join(",") });
+    // MarketDataClient doesn't expose snapshots directly — fetch
+    // the latest trade for each symbol as a fallback.
     const results: Snapshot[] = [];
-
-    for (const [symbol, snap] of snapshots) {
-      results.push({
-        symbol,
-        price: snap.latestTrade.p,
-        change: snap.dailyBar ? snap.dailyBar.c - snap.prevDailyBar.c : undefined,
-        changePct: snap.dailyBar && snap.prevDailyBar
-          ? ((snap.dailyBar.c - snap.prevDailyBar.c) / snap.prevDailyBar.c) * 100
-          : undefined,
-        volume: snap.dailyBar?.v,
-        timestamp: new Date(snap.latestTrade.t).toISOString(),
-        source: "alpaca",
-      });
+    for (const symbol of symbols) {
+      try {
+        const trades = await this.client.marketData.getStockTradesFor(symbol, {
+          start: new Date(Date.now() - 5 * 60_000),
+          end: new Date(),
+        });
+        const trade = trades[trades.length - 1];
+        if (trade) {
+          results.push({
+            symbol,
+            price: trade.price,
+            timestamp: new Date(trade.timestamp).toISOString(),
+            source: "alpaca",
+          });
+        }
+      } catch {
+        // Skip symbols with no data
+      }
     }
-
     return results;
+  }
+}
+
+/**
+ * Convert our Timeframe enum to an Alpaca TimeFrameString.
+ */
+function timeframeToAlpaca(tf: Timeframe) {
+  switch (tf) {
+    case "1Min": return timeFrame(1, TimeFrameUnit.Minute);
+    case "5Min": return timeFrame(5, TimeFrameUnit.Minute);
+    case "15Min": return timeFrame(15, TimeFrameUnit.Minute);
+    case "1Hour": return timeFrame(1, TimeFrameUnit.Hour);
+    case "1Day": return timeFrame(1, TimeFrameUnit.Day);
   }
 }
 
