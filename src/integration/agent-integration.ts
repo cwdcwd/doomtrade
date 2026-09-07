@@ -14,7 +14,7 @@ import type { DecisionStore } from "../decision/decision-store.js";
 import type { TradeEngine } from "../engine/trade-engine.js";
 import type { Portfolio } from "../portfolio/portfolio.js";
 import type { Decision, Agent } from "../decision/decision.js";
-// @ts-expect-error — @cwdcwd/agent-bridge has no bundled type declarations
+// @cwdcwd/agent-bridge has no bundled type declarations
 import { A2AClient } from "@cwdcwd/agent-bridge";
 
 export interface AgentCoordinatorOptions {
