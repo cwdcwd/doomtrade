@@ -47,8 +47,8 @@ describe("TradeEngine", () => {
     engine = new TradeEngine(db, sim, riskConfig);
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await closeDatabase(db);
   });
 
   /** Helper: build a Decision object */
@@ -162,7 +162,7 @@ describe("TradeEngine", () => {
     it("should retrieve a trade by id", async () => {
       const decision = makeDecision({ action: "buy" });
       const result = await engine.executeDecision({ decision });
-      const trade = engine.getTrade(result.tradeRecord!.id);
+      const trade = await engine.getTrade(result.tradeRecord!.id);
 
       expect(trade).not.toBeNull();
       expect(trade!.id).toBe(result.tradeRecord!.id);
@@ -173,7 +173,7 @@ describe("TradeEngine", () => {
       await engine.executeDecision({ decision: makeDecision({ action: "buy", symbol: "AAPL" }) });
       await engine.executeDecision({ decision: makeDecision({ action: "buy", symbol: "MSFT" }) });
 
-      const aaplTrades = engine.listTrades({ symbol: "AAPL" });
+      const aaplTrades = await engine.listTrades({ symbol: "AAPL" });
       expect(aaplTrades).toHaveLength(1);
       expect(aaplTrades[0].symbol).toBe("AAPL");
     });
@@ -185,8 +185,8 @@ describe("TradeEngine", () => {
         decision: makeDecision({ action: "buy", symbol: "BTC/USDT", quantity: 10, priceAtDecision: 65000 }),
       });
 
-      const filled = engine.listTrades({ status: "filled" });
-      const rejected = engine.listTrades({ status: "rejected" });
+      const filled = await engine.listTrades({ status: "filled" });
+      const rejected = await engine.listTrades({ status: "rejected" });
 
       expect(filled).toHaveLength(1);
       expect(rejected).toHaveLength(1);
@@ -196,7 +196,7 @@ describe("TradeEngine", () => {
       const decision = makeDecision({ action: "buy" });
       const result = await engine.executeDecision({ decision });
 
-      const trades = engine.getTradesForDecision(decision.id);
+      const trades = await engine.getTradesForDecision(decision.id);
       expect(trades).toHaveLength(1);
       expect(trades[0].id).toBe(result.tradeRecord!.id);
     });
@@ -465,21 +465,21 @@ describe("TradeEngine", () => {
 
   describe("getDailyTradeCount", () => {
     it("should count today's non-rejected trades", async () => {
-      expect(engine.getDailyTradeCount()).toBe(0);
+      expect(await engine.getDailyTradeCount()).toBe(0);
 
       await engine.executeDecision({ decision: makeDecision({ action: "buy", quantity: 10 }) });
-      expect(engine.getDailyTradeCount()).toBe(1);
+      expect(await engine.getDailyTradeCount()).toBe(1);
 
       // A rejected trade shouldn't count
       await engine.executeDecision({
         decision: makeDecision({ action: "buy", quantity: 200, priceAtDecision: 185 }),
       });
-      expect(engine.getDailyTradeCount()).toBe(1);
+      expect(await engine.getDailyTradeCount()).toBe(1);
 
       await engine.executeDecision({
         decision: makeDecision({ action: "buy", symbol: "MSFT", quantity: 10, priceAtDecision: 420 }),
       });
-      expect(engine.getDailyTradeCount()).toBe(2);
+      expect(await engine.getDailyTradeCount()).toBe(2);
     });
   });
 });

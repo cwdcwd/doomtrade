@@ -14,6 +14,7 @@ import type { DecisionStore } from "../decision/decision-store.js";
 import type { TradeEngine } from "../engine/trade-engine.js";
 import type { Portfolio } from "../portfolio/portfolio.js";
 import type { Decision, Agent } from "../decision/decision.js";
+// @ts-expect-error — @cwdcwd/agent-bridge has no bundled type declarations
 import { A2AClient } from "@cwdcwd/agent-bridge";
 
 export interface AgentCoordinatorOptions {
@@ -65,7 +66,7 @@ export class AgentCoordinator {
     priceAtDecision: number;
     mode: "sim" | "live";
   }): Promise<Decision> {
-    const decision = this.decisionStore.create({
+    const decision = await this.decisionStore.create({
       agent: input.agent,
       symbol: input.symbol,
       action: input.action,
@@ -98,7 +99,7 @@ export class AgentCoordinator {
    * Execute a decision and notify the peer of the outcome.
    */
   async executeDecision(decisionId: string, orderType?: "market" | "limit" | "stop"): Promise<void> {
-    const decision = this.decisionStore.getById(decisionId);
+    const decision = await this.decisionStore.getById(decisionId);
     if (!decision) {
       throw new Error(`Decision not found: ${decisionId}`);
     }

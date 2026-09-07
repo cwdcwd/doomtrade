@@ -77,8 +77,8 @@ describe("API", () => {
     db = await openDatabase({ path: ":memory:" });
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await closeDatabase(db);
   });
 
   // ── Health ────────────────────────────────────────────────────

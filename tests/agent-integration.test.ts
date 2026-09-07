@@ -113,7 +113,7 @@ describe("AgentCoordinator", () => {
         mode: "sim",
       });
 
-      const stored = decisionStore.getById(decision.id);
+      const stored = await decisionStore.getById(decision.id);
       expect(stored).toBeDefined();
       expect(stored!.symbol).toBe("BTC/USDT");
       expect(stored!.action).toBe("sell");

@@ -21,6 +21,7 @@ const ConfigSchema = z.object({
 
   // Database
   databasePath: z.string().default("./data/doomtrade.db"),
+  databaseUrl: z.string().default(""),
 
   // Risk limits
   maxOpenPositions: z.number().int().positive().default(10),
@@ -53,6 +54,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     ccxtApiKey: env.CCXT_API_KEY,
     ccxtApiSecret: env.CCXT_API_SECRET,
     databasePath: env.DATABASE_PATH,
+    databaseUrl: env.DATABASE_URL,
     maxOpenPositions: env.MAX_OPEN_POSITIONS ? parseInt(env.MAX_OPEN_POSITIONS, 10) : undefined,
     maxPositionSizePct: env.MAX_POSITION_SIZE_PCT ? parseFloat(env.MAX_POSITION_SIZE_PCT) : undefined,
     dailyTradeLimit: env.DAILY_TRADE_LIMIT ? parseInt(env.DAILY_TRADE_LIMIT, 10) : undefined,

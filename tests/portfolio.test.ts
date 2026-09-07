@@ -62,7 +62,7 @@ class MockExecutor implements Executor {
 
 describe("positions helpers", () => {
   describe("computeUnrealizedPnl", () => {
-    it("should compute positive P&L for a long position above entry", () => {
+    it("should compute positive P&L for a long position above entry", async () => {
       const pnl = computeUnrealizedPnl({
         quantity: 100,
         avgEntryPrice: 150,
@@ -72,7 +72,7 @@ describe("positions helpers", () => {
       expect(pnl).toBe(2500); // (175 - 150) * 100
     });
 
-    it("should compute negative P&L for a long position below entry", () => {
+    it("should compute negative P&L for a long position below entry", async () => {
       const pnl = computeUnrealizedPnl({
         quantity: 100,
         avgEntryPrice: 150,
@@ -82,7 +82,7 @@ describe("positions helpers", () => {
       expect(pnl).toBe(-1000); // (140 - 150) * 100
     });
 
-    it("should compute P&L for a short position", () => {
+    it("should compute P&L for a short position", async () => {
       const pnl = computeUnrealizedPnl({
         quantity: 50,
         avgEntryPrice: 200,
@@ -92,7 +92,7 @@ describe("positions helpers", () => {
       expect(pnl).toBe(1000); // (200 - 180) * 50 — short profits from price drop
     });
 
-    it("should return 0 when currentPrice is null", () => {
+    it("should return 0 when currentPrice is null", async () => {
       const pnl = computeUnrealizedPnl({
         quantity: 100,
         avgEntryPrice: 150,
@@ -102,7 +102,7 @@ describe("positions helpers", () => {
       expect(pnl).toBe(0);
     });
 
-    it("should return 0 when currentPrice is 0", () => {
+    it("should return 0 when currentPrice is 0", async () => {
       const pnl = computeUnrealizedPnl({
         quantity: 100,
         avgEntryPrice: 150,
@@ -114,36 +114,36 @@ describe("positions helpers", () => {
   });
 
   describe("computeMarketValue", () => {
-    it("should compute market value as quantity × price", () => {
+    it("should compute market value as quantity × price", async () => {
       const mv = computeMarketValue({ quantity: 100, currentPrice: 185 });
       expect(mv).toBe(18_500);
     });
 
-    it("should return 0 when currentPrice is null", () => {
+    it("should return 0 when currentPrice is null", async () => {
       const mv = computeMarketValue({ quantity: 100, currentPrice: null });
       expect(mv).toBe(0);
     });
   });
 
   describe("computeExposure", () => {
-    it("should compute exposure as percentage of equity", () => {
+    it("should compute exposure as percentage of equity", async () => {
       const exposure = computeExposure(50_000, 100_000);
       expect(exposure).toBe(50); // 50%
     });
 
-    it("should handle 0 equity", () => {
+    it("should handle 0 equity", async () => {
       const exposure = computeExposure(50_000, 0);
       expect(exposure).toBe(0);
     });
 
-    it("should handle >100% exposure (leveraged)", () => {
+    it("should handle >100% exposure (leveraged)", async () => {
       const exposure = computeExposure(150_000, 100_000);
       expect(exposure).toBe(150);
     });
   });
 
   describe("aggregateUnrealizedPnl", () => {
-    it("should sum P&L across positions", () => {
+    it("should sum P&L across positions", async () => {
       const positions: PortfolioPosition[] = [
         { symbol: "AAPL", quantity: 100, avgEntryPrice: 150, side: "long", currentPrice: 175 },
         { symbol: "MSFT", quantity: 50, avgEntryPrice: 400, side: "long", currentPrice: 380 },
@@ -151,20 +151,20 @@ describe("positions helpers", () => {
       expect(aggregateUnrealizedPnl(positions)).toBe(1500); // 2500 + (-1000)
     });
 
-    it("should use pre-computed unrealizedPnl if present", () => {
+    it("should use pre-computed unrealizedPnl if present", async () => {
       const positions: PortfolioPosition[] = [
         { symbol: "AAPL", quantity: 100, avgEntryPrice: 150, side: "long", currentPrice: 175, unrealizedPnl: 999 },
       ];
       expect(aggregateUnrealizedPnl(positions)).toBe(999);
     });
 
-    it("should return 0 for empty positions", () => {
+    it("should return 0 for empty positions", async () => {
       expect(aggregateUnrealizedPnl([])).toBe(0);
     });
   });
 
   describe("aggregateMarketValue", () => {
-    it("should sum market values across positions", () => {
+    it("should sum market values across positions", async () => {
       const positions: PortfolioPosition[] = [
         { symbol: "AAPL", quantity: 100, avgEntryPrice: 150, side: "long", currentPrice: 185 },
         { symbol: "BTC/USDT", quantity: 1, avgEntryPrice: 60_000, side: "long", currentPrice: 65_000 },
@@ -172,7 +172,7 @@ describe("positions helpers", () => {
       expect(aggregateMarketValue(positions)).toBe(83_500); // 18500 + 65000
     });
 
-    it("should return 0 for empty positions", () => {
+    it("should return 0 for empty positions", async () => {
       expect(aggregateMarketValue([])).toBe(0);
     });
   });
@@ -194,8 +194,8 @@ describe("Portfolio", () => {
     });
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await closeDatabase(db);
   });
 
   describe("getSnapshot", () => {
@@ -302,7 +302,7 @@ describe("Portfolio", () => {
 
     it("should compute realized P&L from trades table", async () => {
       // Insert a filled trade with realized P&L
-      db.run(
+      await db.run(
         `INSERT INTO trades
           (id, decision_id, timestamp, symbol, side, quantity, order_type,
            fill_price, status, fee, realized_pnl, mode, executor, error)
@@ -342,7 +342,7 @@ describe("Portfolio", () => {
           unrealizedPnl: 2500,
         },
       ]);
-      db.run(
+      await db.run(
         `INSERT INTO trades
           (id, decision_id, timestamp, symbol, side, quantity, order_type,
            fill_price, status, fee, realized_pnl, mode, executor, error)
@@ -396,7 +396,7 @@ describe("Portfolio", () => {
     it("should persist a snapshot to portfolio_history", async () => {
       await portfolio.recordCheckpoint();
 
-      const rows = execAll<{ id: string; equity: number; cash: number }>(
+      const rows = await execAll<{ id: string; equity: number; cash: number }>(
         db,
         "SELECT id, equity, cash FROM portfolio_history",
       );
@@ -412,7 +412,7 @@ describe("Portfolio", () => {
       mockExecutor.setBalance({ cash: 80_000, equity: 80_000 });
       await portfolio.recordCheckpoint();
 
-      const rows = execAll<{ equity: number }>(
+      const rows = await execAll<{ equity: number }>(
         db,
         "SELECT equity FROM portfolio_history ORDER BY equity ASC",
       );
@@ -435,10 +435,11 @@ describe("Portfolio", () => {
 
       await portfolio.recordCheckpoint();
 
-      const row = execAll<{ unrealized_pnl: number; realized_pnl: number }>(
+      const rows = await execAll<{ unrealized_pnl: number; realized_pnl: number }>(
         db,
         "SELECT unrealized_pnl, realized_pnl FROM portfolio_history",
-      )[0];
+      );
+      const row = rows[0];
 
       expect(row.unrealized_pnl).toBe(2500);
       expect(row.realized_pnl).toBe(0);
@@ -496,8 +497,8 @@ describe("Portfolio", () => {
   });
 
   describe("getPeakEquity", () => {
-    it("should return 0 with no history", () => {
-      expect(portfolio.getPeakEquity()).toBe(0);
+    it("should return 0 with no history", async () => {
+      expect(await portfolio.getPeakEquity()).toBe(0);
     });
 
     it("should return the maximum equity from history", async () => {
@@ -510,7 +511,7 @@ describe("Portfolio", () => {
       mockExecutor.setBalance({ cash: 105_000, equity: 105_000 });
       await portfolio.recordCheckpoint();
 
-      expect(portfolio.getPeakEquity()).toBe(120_000);
+      expect(await portfolio.getPeakEquity()).toBe(120_000);
     });
   });
 
@@ -553,8 +554,8 @@ describe("Portfolio + SimulatedExchange integration", () => {
     });
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await closeDatabase(db);
   });
 
   it("should reflect initial state with no positions", async () => {

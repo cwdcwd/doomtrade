@@ -15,12 +15,12 @@ describe("Database", () => {
     db = await openDatabase({ path: ":memory:" });
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await closeDatabase(db);
   });
 
-  it("should open and create required tables", () => {
-    const tables = execAll<{ name: string }>(
+  it("should open and create required tables", async () => {
+    const tables = await execAll<{ name: string }>(
       db,
       "SELECT name FROM sqlite_master WHERE type='table' ORDER BY name",
     );
@@ -33,9 +33,9 @@ describe("Database", () => {
     expect(tableNames).toContain("sim_balance");
   });
 
-  it("should be idempotent — running migrations twice doesn't error", () => {
+  it("should be idempotent — running migrations twice doesn't error", async () => {
     // Migrations already ran in openDatabase. Calling again should be safe.
-    const tables = execAll<{ name: string }>(
+    const tables = await execAll<{ name: string }>(
       db,
       "SELECT name FROM sqlite_master WHERE type='table'",
     );
@@ -52,8 +52,8 @@ describe("DecisionStore", () => {
     store = new DecisionStore(db);
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await closeDatabase(db);
   });
 
   const sampleInput: CreateDecisionInput = {
@@ -73,8 +73,8 @@ describe("DecisionStore", () => {
   };
 
   describe("create", () => {
-    it("should create a decision with generated id and timestamp", () => {
-      const decision = store.create(sampleInput);
+    it("should create a decision with generated id and timestamp", async () => {
+      const decision = await store.create(sampleInput);
 
       expect(decision.id).toBeTruthy();
       expect(decision.id).toMatch(
@@ -92,61 +92,61 @@ describe("DecisionStore", () => {
       expect(decision.marketContext?.indicators?.rsi).toBe(55);
     });
 
-    it("should create a decision without market context", () => {
+    it("should create a decision without market context", async () => {
       const input: CreateDecisionInput = {
         ...sampleInput,
         marketContext: undefined,
       };
-      const decision = store.create(input);
+      const decision = await store.create(input);
 
       expect(decision.marketContext).toBeUndefined();
     });
 
-    it("should reject invalid agent", () => {
-      expect(() =>
+    it("should reject invalid agent", async () => {
+      await expect(
         store.create({ ...sampleInput, agent: "invalid" as never }),
-      ).toThrow();
+      ).rejects.toThrow();
     });
 
-    it("should reject invalid action", () => {
-      expect(() =>
+    it("should reject invalid action", async () => {
+      await expect(
         store.create({ ...sampleInput, action: "invalid" as never }),
-      ).toThrow();
+      ).rejects.toThrow();
     });
 
-    it("should reject confidence out of range (0)", () => {
-      expect(() => store.create({ ...sampleInput, confidence: 0 })).toThrow();
+    it("should reject confidence out of range (0)", async () => {
+      await expect(store.create({ ...sampleInput, confidence: 0 })).rejects.toThrow();
     });
 
-    it("should reject confidence out of range (11)", () => {
-      expect(() => store.create({ ...sampleInput, confidence: 11 })).toThrow();
+    it("should reject confidence out of range (11)", async () => {
+      await expect(store.create({ ...sampleInput, confidence: 11 })).rejects.toThrow();
     });
 
-    it("should reject negative quantity", () => {
-      expect(() =>
+    it("should reject negative quantity", async () => {
+      await expect(
         store.create({ ...sampleInput, quantity: -10 }),
-      ).toThrow();
+      ).rejects.toThrow();
     });
 
-    it("should reject empty rationale", () => {
-      expect(() =>
+    it("should reject empty rationale", async () => {
+      await expect(
         store.create({ ...sampleInput, rationale: "" }),
-      ).toThrow();
+      ).rejects.toThrow();
     });
   });
 
   describe("getById", () => {
-    it("should retrieve a decision by id", () => {
-      const created = store.create(sampleInput);
-      const retrieved = store.getById(created.id);
+    it("should retrieve a decision by id", async () => {
+      const created = await store.create(sampleInput);
+      const retrieved = await store.getById(created.id);
 
       expect(retrieved).not.toBeNull();
       expect(retrieved!.id).toBe(created.id);
       expect(retrieved!.symbol).toBe("AAPL");
     });
 
-    it("should return null for non-existent id", () => {
-      const result = store.getById("nonexistent-uuid");
+    it("should return null for non-existent id", async () => {
+      const result = await store.getById("nonexistent-uuid");
       expect(result).toBeNull();
     });
   });
@@ -154,76 +154,76 @@ describe("DecisionStore", () => {
   describe("list", () => {
     it("should list decisions ordered by timestamp descending", async () => {
       // Add a small delay to ensure different timestamps
-      store.create({ ...sampleInput, symbol: "AAPL" });
+      await store.create({ ...sampleInput, symbol: "AAPL" });
       await new Promise((r) => setTimeout(r, 10));
-      store.create({ ...sampleInput, symbol: "BTC/USDT" });
+      await store.create({ ...sampleInput, symbol: "BTC/USDT" });
       await new Promise((r) => setTimeout(r, 10));
-      store.create({ ...sampleInput, symbol: "GOOGL" });
+      await store.create({ ...sampleInput, symbol: "GOOGL" });
 
-      const decisions = store.list();
+      const decisions = await store.list();
       expect(decisions).toHaveLength(3);
       // Most recent first
       expect(decisions[0].symbol).toBe("GOOGL");
       expect(decisions[2].symbol).toBe("AAPL");
     });
 
-    it("should filter by agent", () => {
-      store.create({ ...sampleInput, agent: "kangbot" });
-      store.create({ ...sampleInput, agent: "doom", symbol: "MSFT" });
+    it("should filter by agent", async () => {
+      await store.create({ ...sampleInput, agent: "kangbot" });
+      await store.create({ ...sampleInput, agent: "doom", symbol: "MSFT" });
 
-      const decisions = store.list({ agent: "kangbot" });
+      const decisions = await store.list({ agent: "kangbot" });
       expect(decisions).toHaveLength(1);
       expect(decisions[0].agent).toBe("kangbot");
     });
 
-    it("should filter by symbol", () => {
-      store.create({ ...sampleInput, symbol: "AAPL" });
-      store.create({ ...sampleInput, symbol: "MSFT" });
-      store.create({ ...sampleInput, symbol: "AAPL" });
+    it("should filter by symbol", async () => {
+      await store.create({ ...sampleInput, symbol: "AAPL" });
+      await store.create({ ...sampleInput, symbol: "MSFT" });
+      await store.create({ ...sampleInput, symbol: "AAPL" });
 
-      const decisions = store.list({ symbol: "AAPL" });
+      const decisions = await store.list({ symbol: "AAPL" });
       expect(decisions).toHaveLength(2);
       decisions.forEach((d) => expect(d.symbol).toBe("AAPL"));
     });
 
-    it("should filter by action", () => {
-      store.create({ ...sampleInput, action: "buy" });
-      store.create({ ...sampleInput, action: "sell", symbol: "MSFT" });
-      store.create({ ...sampleInput, action: "hold", symbol: "GOOGL" });
+    it("should filter by action", async () => {
+      await store.create({ ...sampleInput, action: "buy" });
+      await store.create({ ...sampleInput, action: "sell", symbol: "MSFT" });
+      await store.create({ ...sampleInput, action: "hold", symbol: "GOOGL" });
 
-      const decisions = store.list({ action: "buy" });
+      const decisions = await store.list({ action: "buy" });
       expect(decisions).toHaveLength(1);
       expect(decisions[0].action).toBe("buy");
     });
 
-    it("should filter by mode", () => {
-      store.create({ ...sampleInput, mode: "sim" });
-      store.create({ ...sampleInput, mode: "live", symbol: "MSFT" });
+    it("should filter by mode", async () => {
+      await store.create({ ...sampleInput, mode: "sim" });
+      await store.create({ ...sampleInput, mode: "live", symbol: "MSFT" });
 
-      const decisions = store.list({ mode: "live" });
+      const decisions = await store.list({ mode: "live" });
       expect(decisions).toHaveLength(1);
       expect(decisions[0].mode).toBe("live");
     });
 
     it("should filter by date range", async () => {
-      store.create({ ...sampleInput, symbol: "FIRST" });
+      await store.create({ ...sampleInput, symbol: "FIRST" });
       await new Promise((r) => setTimeout(r, 50));
       const midpoint = new Date().toISOString();
       await new Promise((r) => setTimeout(r, 50));
-      store.create({ ...sampleInput, symbol: "SECOND" });
+      await store.create({ ...sampleInput, symbol: "SECOND" });
 
-      const decisions = store.list({ startDate: midpoint });
+      const decisions = await store.list({ startDate: midpoint });
       expect(decisions).toHaveLength(1);
       expect(decisions[0].symbol).toBe("SECOND");
     });
 
-    it("should respect limit and offset", () => {
+    it("should respect limit and offset", async () => {
       for (let i = 0; i < 5; i++) {
-        store.create({ ...sampleInput, symbol: `STOCK${i}` });
+        await store.create({ ...sampleInput, symbol: `STOCK${i}` });
       }
 
-      const page1 = store.list({ limit: 2, offset: 0 });
-      const page2 = store.list({ limit: 2, offset: 2 });
+      const page1 = await store.list({ limit: 2, offset: 0 });
+      const page2 = await store.list({ limit: 2, offset: 2 });
 
       expect(page1).toHaveLength(2);
       expect(page2).toHaveLength(2);
@@ -233,34 +233,34 @@ describe("DecisionStore", () => {
       expect(page1Ids.some((id) => page2Ids.includes(id))).toBe(false);
     });
 
-    it("should return empty array when no matches", () => {
-      const decisions = store.list({ symbol: "NONEXISTENT" });
+    it("should return empty array when no matches", async () => {
+      const decisions = await store.list({ symbol: "NONEXISTENT" });
       expect(decisions).toEqual([]);
     });
   });
 
   describe("count", () => {
-    it("should count all decisions", () => {
-      store.create({ ...sampleInput, symbol: "AAPL" });
-      store.create({ ...sampleInput, symbol: "MSFT" });
+    it("should count all decisions", async () => {
+      await store.create({ ...sampleInput, symbol: "AAPL" });
+      await store.create({ ...sampleInput, symbol: "MSFT" });
 
-      expect(store.count()).toBe(2);
+      expect(await store.count()).toBe(2);
     });
 
-    it("should count with filter", () => {
-      store.create({ ...sampleInput, agent: "kangbot" });
-      store.create({ ...sampleInput, agent: "doom", symbol: "MSFT" });
+    it("should count with filter", async () => {
+      await store.create({ ...sampleInput, agent: "kangbot" });
+      await store.create({ ...sampleInput, agent: "doom", symbol: "MSFT" });
 
-      expect(store.count({ agent: "kangbot" })).toBe(1);
+      expect(await store.count({ agent: "kangbot" })).toBe(1);
     });
   });
 
   describe("append-only", () => {
-    it("should have no update method", () => {
+    it("should have no update method", async () => {
       expect((store as unknown as Record<string, unknown>).update).toBeUndefined();
     });
 
-    it("should have no delete method", () => {
+    it("should have no delete method", async () => {
       expect((store as unknown as Record<string, unknown>).delete).toBeUndefined();
     });
   });

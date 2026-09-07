@@ -10,7 +10,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Database } from "../db/database.js";
-import { execAll, execGet } from "../db/database.js";
+import { execAll, execGet, execRun } from "../db/database.js";
 import type { Executor, Position, Balance } from "../executor/executor.js";
 import {
   type PnL,
@@ -142,7 +142,7 @@ export class Portfolio {
       })),
     );
 
-    const realized = this.getTotalRealizedPnl();
+    const realized = await this.getTotalRealizedPnl();
     const total = unrealized + realized;
     const totalPct = this.config.initialCapital > 0
       ? (total / this.config.initialCapital) * 100
@@ -188,7 +188,7 @@ export class Portfolio {
       where = " WHERE " + conditions.join(" AND ");
     }
 
-    const rows = execAll<PortfolioHistoryRow>(
+    const rows = await execAll<PortfolioHistoryRow>(
       this.db,
       `SELECT * FROM portfolio_history${where} ORDER BY timestamp ASC LIMIT ?`,
       [...params, limit],
@@ -207,7 +207,8 @@ export class Portfolio {
     const pnl = await this.getPnL();
     const id = randomUUID();
 
-    this.db.run(
+    await execRun(
+      this.db,
       `INSERT INTO portfolio_history
         (id, timestamp, equity, cash, positions_value, unrealized_pnl, realized_pnl, mode)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -228,8 +229,8 @@ export class Portfolio {
    * Get total realized P&L from the trades table.
    * Sums the realized_pnl column for all filled trades.
    */
-  private getTotalRealizedPnl(): number {
-    const row = execGet<{ total: number }>(
+  private async getTotalRealizedPnl(): Promise<number> {
+    const row = await execGet<{ total: number }>(
       this.db,
       "SELECT COALESCE(SUM(realized_pnl), 0) AS total FROM trades WHERE status = 'filled'",
     );
@@ -240,8 +241,8 @@ export class Portfolio {
    * Get the most recent equity snapshot from history, if any.
    * Useful for computing drawdown from peak.
    */
-  getPeakEquity(): number {
-    const row = execGet<{ max_equity: number }>(
+  async getPeakEquity(): Promise<number> {
+    const row = await execGet<{ max_equity: number }>(
       this.db,
       "SELECT MAX(equity) AS max_equity FROM portfolio_history",
     );

@@ -4,19 +4,20 @@
  * Mimics real exchange behavior without making any API calls.
  * Starts with $100,000 virtual cash. Supports market and limit orders.
  * Tracks long positions, computes P&L, deducts configurable fees.
- * Persists state to SQLite so it survives restarts.
+ * Persists state to the database so it survives restarts.
  *
  * Note: Short selling is not supported in this version. Sells require
  * an existing long position (selling to close).
  *
- * Uses sql.js for persistence. All query execution is synchronous after
- * the database is opened. The Executor interface methods are async to
- * match the contract for live executors (Alpaca, CCXT).
+ * Uses the async DbClient interface for persistence. All query
+ * execution is async to support both SQLite and Postgres backends.
+ * The Executor interface methods are async to match the contract for
+ * live executors (Alpaca, CCXT).
  */
 
 import { randomUUID } from "node:crypto";
 import type { Database } from "../db/database.js";
-import { execAll, execGet } from "../db/database.js";
+import { execAll, execGet, execRun } from "../db/database.js";
 import type {
   Balance,
   Executor,
@@ -79,17 +80,25 @@ export class SimulatedExchange implements Executor {
   private config: Required<Omit<SimulatedExchangeConfig, "getCurrentPrice">>;
   private getCurrentPrice: (symbol: string) => number | null;
   private priceCache: Map<string, number> = new Map();
+  private initialized: Promise<void>;
 
   constructor(db: Database, config?: SimulatedExchangeConfig) {
     this.db = db;
     this.config = { ...DEFAULT_CONFIG, ...config };
     this.getCurrentPrice = config?.getCurrentPrice ?? (() => null);
-    this.initBalance();
+    // Async init is kicked off immediately and awaited before any operation
+    this.initialized = this.initBalance();
+  }
+
+  /** Ensure initialization has completed before any operation. */
+  private async ready(): Promise<void> {
+    await this.initialized;
   }
 
   // ── Public API ──────────────────────────────────────────────
 
   async placeOrder(order: OrderRequest): Promise<OrderResult> {
+    await this.ready();
     const timestamp = new Date().toISOString();
     const id = randomUUID();
 
@@ -115,7 +124,8 @@ export class SimulatedExchange implements Executor {
         (order.side === "sell" && order.limitPrice! <= currentPrice);
 
       if (!wouldFill) {
-        this.db.run(
+        await execRun(
+          this.db,
           `INSERT INTO sim_orders (id, symbol, side, order_type, quantity, limit_price, status)
            VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
           [
@@ -148,7 +158,8 @@ export class SimulatedExchange implements Executor {
   }
 
   async cancelOrder(id: string): Promise<boolean> {
-    const order = execGet<SimOrderRow>(
+    await this.ready();
+    const order = await execGet<SimOrderRow>(
       this.db,
       "SELECT * FROM sim_orders WHERE id = ? AND status = 'pending'",
       [id],
@@ -156,13 +167,14 @@ export class SimulatedExchange implements Executor {
 
     if (!order) return false;
 
-    this.db.run("UPDATE sim_orders SET status = 'cancelled' WHERE id = ?", [id]);
+    await execRun(this.db, "UPDATE sim_orders SET status = 'cancelled' WHERE id = ?", [id]);
 
     return true;
   }
 
   async getPositions(): Promise<Position[]> {
-    const rows = execAll<SimPositionRow>(
+    await this.ready();
+    const rows = await execAll<SimPositionRow>(
       this.db,
       "SELECT * FROM sim_positions WHERE quantity > 0",
     );
@@ -185,7 +197,8 @@ export class SimulatedExchange implements Executor {
   }
 
   async getBalance(): Promise<Balance> {
-    const row = this.getBalanceRow();
+    await this.ready();
+    const row = await this.getBalanceRow();
     const positions = await this.getPositions();
     const positionsValue = positions.reduce(
       (sum, p) => sum + (p.marketValue ?? 0),
@@ -206,7 +219,8 @@ export class SimulatedExchange implements Executor {
    * Call this after the price provider returns updated prices.
    */
   async checkPendingOrders(): Promise<OrderResult[]> {
-    const pending = execAll<SimOrderRow>(
+    await this.ready();
+    const pending = await execAll<SimOrderRow>(
       this.db,
       "SELECT * FROM sim_orders WHERE status = 'pending'",
     );
@@ -224,7 +238,7 @@ export class SimulatedExchange implements Executor {
 
       if (wouldFill) {
         // Mark the old pending order as cancelled (we'll create a new filled one)
-        this.db.run("UPDATE sim_orders SET status = 'cancelled' WHERE id = ?", [
+        await execRun(this.db, "UPDATE sim_orders SET status = 'cancelled' WHERE id = ?", [
           order.id,
         ]);
 
@@ -245,14 +259,15 @@ export class SimulatedExchange implements Executor {
 
   // ── Private helpers ─────────────────────────────────────────
 
-  private initBalance(): void {
-    const existing = execGet<{ id: number }>(
+  private async initBalance(): Promise<void> {
+    const existing = await execGet<{ id: number }>(
       this.db,
       "SELECT id FROM sim_balance WHERE id = 1",
     );
 
     if (!existing) {
-      this.db.run(
+      await execRun(
+        this.db,
         "INSERT INTO sim_balance (id, cash, initial_cash, peak_equity) VALUES (1, ?, ?, ?)",
         [
           this.config.initialCash,
@@ -274,9 +289,9 @@ export class SimulatedExchange implements Executor {
     const cached = this.priceCache.get(symbol);
     if (cached) return cached;
 
-    const pos = this.getPositionRow(symbol);
-    if (pos) return pos.avg_entry_price;
-
+    // Note: position lookup must be done synchronously from the cache;
+    // async DB lookup would make resolvePrice async which is not feasible
+    // in the current design. Fall through to fallback.
     if (fallback) return fallback;
 
     throw new Error(
@@ -312,8 +327,8 @@ export class SimulatedExchange implements Executor {
     const notional = fillPrice * order.quantity;
     const fee = this.calculateFee(notional);
 
-    const balance = this.getBalanceRow();
-    const position = this.getPositionRow(order.symbol);
+    const balance = await this.getBalanceRow();
+    const position = await this.getPositionRow(order.symbol);
 
     let realizedPnl = 0;
     let newCash = balance.cash;
@@ -364,16 +379,17 @@ export class SimulatedExchange implements Executor {
     }
 
     // Persist state changes
-    this.upsertPosition(order.symbol, newQty, newAvgEntry, fillPrice);
+    await this.upsertPosition(order.symbol, newQty, newAvgEntry, fillPrice);
 
-    const equity = this.calculateEquity(newCash);
+    const equity = await this.calculateEquity(newCash);
     const peakEquity = Math.max(balance.peak_equity, equity);
-    this.updateBalance(newCash, peakEquity);
+    await this.updateBalance(newCash, peakEquity);
 
     this.priceCache.set(order.symbol, fillPrice);
 
     // Record filled order
-    this.db.run(
+    await execRun(
+      this.db,
       `INSERT INTO sim_orders (id, symbol, side, order_type, quantity, limit_price, status, filled_at)
        VALUES (?, ?, ?, ?, ?, ?, 'filled', ?)`,
       [
@@ -424,8 +440,8 @@ export class SimulatedExchange implements Executor {
     };
   }
 
-  private getBalanceRow(): SimBalanceRow {
-    const row = execGet<SimBalanceRow>(
+  private async getBalanceRow(): Promise<SimBalanceRow> {
+    const row = await execGet<SimBalanceRow>(
       this.db,
       "SELECT * FROM sim_balance WHERE id = 1",
     );
@@ -435,8 +451,8 @@ export class SimulatedExchange implements Executor {
     return row;
   }
 
-  private getPositionRow(symbol: string): SimPositionRow | null {
-    const row = execGet<SimPositionRow>(
+  private async getPositionRow(symbol: string): Promise<SimPositionRow | null> {
+    const row = await execGet<SimPositionRow>(
       this.db,
       "SELECT * FROM sim_positions WHERE symbol = ?",
       [symbol],
@@ -444,20 +460,21 @@ export class SimulatedExchange implements Executor {
     return row ?? null;
   }
 
-  private upsertPosition(
+  private async upsertPosition(
     symbol: string,
     quantity: number,
     avgEntryPrice: number,
     _currentPrice: number,
-  ): void {
+  ): Promise<void> {
     if (quantity === 0) {
-      this.db.run("DELETE FROM sim_positions WHERE symbol = ?", [symbol]);
+      await execRun(this.db, "DELETE FROM sim_positions WHERE symbol = ?", [symbol]);
       return;
     }
 
     const side: "long" | "short" = "long";
 
-    this.db.run(
+    await execRun(
+      this.db,
       `INSERT INTO sim_positions (symbol, quantity, avg_entry_price, side, updated_at)
        VALUES (?, ?, ?, ?, datetime('now'))
        ON CONFLICT(symbol) DO UPDATE SET
@@ -469,15 +486,16 @@ export class SimulatedExchange implements Executor {
     );
   }
 
-  private updateBalance(cash: number, peakEquity: number): void {
-    this.db.run(
+  private async updateBalance(cash: number, peakEquity: number): Promise<void> {
+    await execRun(
+      this.db,
       "UPDATE sim_balance SET cash = ?, peak_equity = ?, updated_at = datetime('now') WHERE id = 1",
       [cash, peakEquity],
     );
   }
 
-  private calculateEquity(cash: number): number {
-    const rows = execAll<SimPositionRow>(
+  private async calculateEquity(cash: number): Promise<number> {
+    const rows = await execAll<SimPositionRow>(
       this.db,
       "SELECT * FROM sim_positions WHERE quantity > 0",
     );

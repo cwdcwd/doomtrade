@@ -18,7 +18,7 @@
 
 import { randomUUID } from "node:crypto";
 import type { Database } from "../db/database.js";
-import { execGet, execAll } from "../db/database.js";
+import { execGet, execAll, execRun } from "../db/database.js";
 import type { Executor, OrderRequest, OrderResult, Position } from "../executor/executor.js";
 import type { Config } from "../config.js";
 import type { Decision } from "../decision/decision.js";
@@ -190,7 +190,7 @@ export class TradeEngine {
 
     if (!riskPassed) {
       // Log a rejected trade
-      const trade = this.logTrade({
+      const trade = await this.logTrade({
         decisionId: decision.id,
         symbol: decision.symbol,
         side: decision.action as "buy" | "sell",
@@ -216,7 +216,7 @@ export class TradeEngine {
     const orderResult = await this.executor.placeOrder(order);
 
     // Log the trade
-    const trade = this.logTrade({
+    const trade = await this.logTrade({
       decisionId: decision.id,
       symbol: decision.symbol,
       side: decision.action as "buy" | "sell",
@@ -312,7 +312,7 @@ export class TradeEngine {
    */
   private async checkDailyTradeLimit(): Promise<RiskCheckResult> {
     const today = todayDateString();
-    const row = execGet<{ count: number }>(
+    const row = await execGet<{ count: number }>(
       this.db,
       `SELECT COUNT(*) as count FROM trades
        WHERE date(timestamp) = date(?) AND status != 'rejected'`,
@@ -359,7 +359,7 @@ export class TradeEngine {
 
   // ── Trade logging ────────────────────────────────────────────
 
-  private logTrade(params: {
+  private async logTrade(params: {
     decisionId: string;
     symbol: string;
     side: "buy" | "sell";
@@ -370,12 +370,13 @@ export class TradeEngine {
     fee: number;
     realizedPnl: number;
     error: string | null;
-  }): TradeRecord {
+  }): Promise<TradeRecord> {
     const id = randomUUID();
     const timestamp = new Date().toISOString();
     const executorName = this.executor.name as "simulated" | "alpaca" | "ccxt";
 
-    this.db.run(
+    await execRun(
+      this.db,
       `INSERT INTO trades
          (id, decision_id, timestamp, symbol, side, quantity, order_type,
           fill_price, status, fee, realized_pnl, mode, executor, error)
@@ -398,7 +399,7 @@ export class TradeEngine {
       ],
     );
 
-    const row = execGet<TradeRow>(
+    const row = await execGet<TradeRow>(
       this.db,
       "SELECT * FROM trades WHERE id = ?",
       [id],
@@ -412,8 +413,8 @@ export class TradeEngine {
   /**
    * Get a trade by ID.
    */
-  getTrade(id: string): TradeRecord | null {
-    const row = execGet<TradeRow>(
+  async getTrade(id: string): Promise<TradeRecord | null> {
+    const row = await execGet<TradeRow>(
       this.db,
       "SELECT * FROM trades WHERE id = ?",
       [id],
@@ -425,13 +426,13 @@ export class TradeEngine {
    * List trades, optionally filtered by symbol, status, or decision ID.
    * Returns most recent first.
    */
-  listTrades(filter?: {
+  async listTrades(filter?: {
     symbol?: string;
     status?: TradeRecord["status"];
     decisionId?: string;
     limit?: number;
     offset?: number;
-  }): TradeRecord[] {
+  }): Promise<TradeRecord[]> {
     const conditions: string[] = [];
     const params: (string | number)[] = [];
 
@@ -458,16 +459,16 @@ export class TradeEngine {
     sql += " ORDER BY timestamp DESC LIMIT ? OFFSET ?";
     params.push(limit, offset);
 
-    const rows = execAll<TradeRow>(this.db, sql, params);
+    const rows = await execAll<TradeRow>(this.db, sql, params);
     return rows.map(rowToTradeRecord);
   }
 
   /**
    * Count trades today (excluding rejected).
    */
-  getDailyTradeCount(): number {
+  async getDailyTradeCount(): Promise<number> {
     const today = todayDateString();
-    const row = execGet<{ count: number }>(
+    const row = await execGet<{ count: number }>(
       this.db,
       `SELECT COUNT(*) as count FROM trades
        WHERE date(timestamp) = date(?) AND status != 'rejected'`,
@@ -479,7 +480,7 @@ export class TradeEngine {
   /**
    * Get all trades for a decision.
    */
-  getTradesForDecision(decisionId: string): TradeRecord[] {
+  async getTradesForDecision(decisionId: string): Promise<TradeRecord[]> {
     return this.listTrades({ decisionId, limit: 1000 });
   }
 }

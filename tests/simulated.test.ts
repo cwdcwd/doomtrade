@@ -31,8 +31,8 @@ describe("SimulatedExchange", () => {
     });
   });
 
-  afterEach(() => {
-    closeDatabase(db);
+  afterEach(async () => {
+    await closeDatabase(db);
   });
 
   const marketBuy: OrderRequest = {
@@ -208,8 +208,8 @@ describe("SimulatedExchange", () => {
 
     it("should support custom fee rate", async () => {
       // Reset balance for custom fee test
-      db.run("DELETE FROM sim_balance WHERE id = 1");
-      db.run("DELETE FROM sim_positions");
+      await db.run("DELETE FROM sim_balance WHERE id = 1");
+      await db.run("DELETE FROM sim_positions");
       const customSim = new SimulatedExchange(db, {
         getCurrentPrice: priceProvider,
         feeRate: 0.005,
@@ -363,8 +363,8 @@ describe("SimulatedExchange", () => {
         });
 
         await sim1.placeOrder(marketBuy); // Buy 100 AAPL @ 185
-        persistDatabase(fileDb, dbPath);
-        closeDatabase(fileDb);
+        await persistDatabase(fileDb, dbPath);
+        await closeDatabase(fileDb);
 
         // Reopen with a new instance — state should persist
         const fileDb2 = await openDatabase({ path: dbPath });
@@ -381,7 +381,7 @@ describe("SimulatedExchange", () => {
         const balance = await sim2.getBalance();
         expect(balance.cash).toBeCloseTo(100_000 - 18500 - 18.5, 2);
 
-        closeDatabase(fileDb2);
+        await closeDatabase(fileDb2);
       } finally {
         if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
       }
@@ -391,8 +391,8 @@ describe("SimulatedExchange", () => {
   describe("slippage", () => {
     it("should apply slippage to fills", async () => {
       // Reset balance for slippage test
-      db.run("DELETE FROM sim_balance WHERE id = 1");
-      db.run("DELETE FROM sim_positions");
+      await db.run("DELETE FROM sim_balance WHERE id = 1");
+      await db.run("DELETE FROM sim_positions");
       const slipSim = new SimulatedExchange(db, {
         getCurrentPrice: priceProvider,
         slippageRate: 0.001, // 0.1%

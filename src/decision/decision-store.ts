@@ -1,13 +1,14 @@
 /**
- * Decision store — SQLite CRUD for the decision log.
+ * Decision store — CRUD for the decision log.
  *
  * Append-only: create, getById, list. No update or delete operations.
- * Uses sql.js query helpers for all database operations.
+ * Uses async query helpers for all database operations (works with both
+ * SQLite and Postgres backends).
  */
 
 import { randomUUID } from "node:crypto";
 import type { Database } from "../db/database.js";
-import { execAll, execGet } from "../db/database.js";
+import { execAll, execGet, execRun } from "../db/database.js";
 import {
   type CreateDecisionInput,
   type Decision,
@@ -28,7 +29,7 @@ export class DecisionStore {
    * Create a new decision. Validates input with Zod, generates id + timestamp.
    * Append-only — this is the only write operation.
    */
-  create(input: CreateDecisionInput): Decision {
+  async create(input: CreateDecisionInput): Promise<Decision> {
     const parsed = CreateDecisionInputSchema.parse(input);
 
     const id = randomUUID();
@@ -37,7 +38,8 @@ export class DecisionStore {
       ? JSON.stringify(parsed.marketContext)
       : null;
 
-    this.db.run(
+    await execRun(
+      this.db,
       `INSERT INTO decisions
          (id, timestamp, agent, symbol, action, quantity, price_at_decision,
           rationale, confidence, mode, market_context)
@@ -57,7 +59,7 @@ export class DecisionStore {
       ],
     );
 
-    const row = execGet<DecisionRow>(
+    const row = await execGet<DecisionRow>(
       this.db,
       "SELECT * FROM decisions WHERE id = ?",
       [id],
@@ -69,8 +71,8 @@ export class DecisionStore {
   /**
    * Get a decision by ID. Returns null if not found.
    */
-  getById(id: string): Decision | null {
-    const row = execGet<DecisionRow>(
+  async getById(id: string): Promise<Decision | null> {
+    const row = await execGet<DecisionRow>(
       this.db,
       "SELECT * FROM decisions WHERE id = ?",
       [id],
@@ -84,7 +86,7 @@ export class DecisionStore {
    * Supports filtering by agent, symbol, action, mode, and date range.
    * Returns most recent first.
    */
-  list(filter?: DecisionFilter): Decision[] {
+  async list(filter?: DecisionFilter): Promise<Decision[]> {
     const conditions: string[] = [];
     const params: (string | number)[] = [];
 
@@ -123,14 +125,14 @@ export class DecisionStore {
     sql += " ORDER BY timestamp DESC LIMIT ? OFFSET ?";
     params.push(limit, offset);
 
-    const rows = execAll<DecisionRow>(this.db, sql, params);
+    const rows = await execAll<DecisionRow>(this.db, sql, params);
     return rows.map(rowToDecision);
   }
 
   /**
    * Count total decisions matching a filter (ignoring limit/offset).
    */
-  count(filter?: DecisionFilter): number {
+  async count(filter?: DecisionFilter): Promise<number> {
     const conditions: string[] = [];
     const params: (string | number)[] = [];
 
@@ -164,7 +166,7 @@ export class DecisionStore {
       sql += " WHERE " + conditions.join(" AND ");
     }
 
-    const result = execGet<{ count: number }>(this.db, sql, params);
+    const result = await execGet<{ count: number }>(this.db, sql, params);
     return result?.count ?? 0;
   }
 }

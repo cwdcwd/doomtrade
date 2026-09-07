@@ -8,7 +8,7 @@
 
 import express from "express";
 import { loadConfig } from "./config.js";
-import { openDatabase, persistDatabase } from "./db/database.js";
+import { openDatabase, persistDatabase, closeDatabase } from "./db/database.js";
 import { DecisionStore } from "./decision/decision-store.js";
 import { SimulatedExchange } from "./executor/simulated.js";
 import { apiKeyAuth } from "./api/auth.js";
@@ -65,8 +65,8 @@ async function createExecutor(
 async function main() {
   const config = loadConfig();
 
-  // Initialize database
-  const db = await openDatabase({ path: config.databasePath });
+  // Initialize database — Postgres if DATABASE_URL is set, SQLite otherwise
+  const db = await openDatabase({ path: config.databasePath, url: config.databaseUrl });
 
   // Initialize executor (sim or live based on mode)
   const executor = await createExecutor(config, db);
@@ -163,7 +163,9 @@ async function main() {
 
   // Persist database on shutdown
   process.on("SIGINT", () => {
-    if (config.databasePath !== ":memory:") {
+    if (config.databaseUrl) {
+      closeDatabase(db);
+    } else if (config.databasePath !== ":memory:") {
       persistDatabase(db, config.databasePath);
     }
     console.log("\nShutting down...");
@@ -171,7 +173,9 @@ async function main() {
   });
 
   process.on("SIGTERM", () => {
-    if (config.databasePath !== ":memory:") {
+    if (config.databaseUrl) {
+      closeDatabase(db);
+    } else if (config.databasePath !== ":memory:") {
       persistDatabase(db, config.databasePath);
     }
     process.exit(0);

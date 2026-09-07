@@ -78,7 +78,7 @@ export function createApiRouter(state: AppState): Router {
 
   // ── Decisions ────────────────────────────────────────────────
 
-  router.post("/decisions", (req: Request, res: Response) => {
+  router.post("/decisions", async (req: Request, res: Response) => {
     const parsed = CreateDecisionBodySchema.safeParse(req.body);
     if (!parsed.success) {
       res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
@@ -86,22 +86,22 @@ export function createApiRouter(state: AppState): Router {
     }
 
     try {
-      const decision = state.decisionStore.create(parsed.data);
+      const decision = await state.decisionStore.create(parsed.data);
       res.status(201).json({ mode: state.currentMode, decision });
     } catch (err) {
       res.status(500).json({ error: "Failed to create decision", message: (err as Error).message });
     }
   });
 
-  router.get("/decisions", (req: Request, res: Response) => {
+  router.get("/decisions", async (req: Request, res: Response) => {
     const parsed = ListDecisionsQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
       return;
     }
 
-    const decisions = state.decisionStore.list(parsed.data);
-    const total = state.decisionStore.count(parsed.data);
+    const decisions = await state.decisionStore.list(parsed.data);
+    const total = await state.decisionStore.count(parsed.data);
     res.json({
       mode: state.currentMode,
       decisions,
@@ -110,8 +110,8 @@ export function createApiRouter(state: AppState): Router {
     });
   });
 
-  router.get("/decisions/:id", (req: Request, res: Response) => {
-    const decision = state.decisionStore.getById(String(req.params.id));
+  router.get("/decisions/:id", async (req: Request, res: Response) => {
+    const decision = await state.decisionStore.getById(String(req.params.id));
     if (!decision) {
       res.status(404).json({ error: "Decision not found", id: req.params.id });
       return;
@@ -131,7 +131,7 @@ export function createApiRouter(state: AppState): Router {
     const { decisionId, orderType, limitPrice, stopPrice } = parsed.data;
 
     // Look up the decision
-    const decision = state.decisionStore.getById(decisionId);
+    const decision = await state.decisionStore.getById(decisionId);
     if (!decision) {
       res.status(404).json({ error: "Decision not found", decisionId });
       return;
@@ -170,7 +170,7 @@ export function createApiRouter(state: AppState): Router {
 
   // ── Trades ───────────────────────────────────────────────────
 
-  router.get("/trades", (req: Request, res: Response) => {
+  router.get("/trades", async (req: Request, res: Response) => {
     const parsed = ListTradesQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
@@ -178,7 +178,7 @@ export function createApiRouter(state: AppState): Router {
     }
 
     const { symbol, status, decisionId, limit, offset } = parsed.data;
-    const trades = state.tradeEngine.listTrades({
+    const trades = await state.tradeEngine.listTrades({
       symbol,
       status,
       decisionId,
@@ -193,8 +193,8 @@ export function createApiRouter(state: AppState): Router {
     });
   });
 
-  router.get("/trades/:id", (req: Request, res: Response) => {
-    const trade = state.tradeEngine.getTrade(String(req.params.id));
+  router.get("/trades/:id", async (req: Request, res: Response) => {
+    const trade = await state.tradeEngine.getTrade(String(req.params.id));
     if (!trade) {
       res.status(404).json({ error: "Trade not found", id: req.params.id });
       return;
