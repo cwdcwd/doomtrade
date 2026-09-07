@@ -4,6 +4,8 @@ dist/
 *.d.ts
 *.js.map
 *.d.ts.map
+# Keep type declaration files
+!src/types/*.d.ts
 !vitest.config.ts
 coverage/
 .env
