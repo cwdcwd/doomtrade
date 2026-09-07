@@ -138,6 +138,7 @@ async function main() {
     res.json({
       status: "ok",
       mode: state.currentMode,
+      db: db.backend,
       timestamp: new Date().toISOString(),
       uptime: process.uptime(),
     });
