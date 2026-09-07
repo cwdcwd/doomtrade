@@ -306,7 +306,7 @@ export class SimulatedExchange implements Executor {
     const basePrice =
       order.orderType === "limit"
         ? order.limitPrice!
-        : this.resolvePrice(order.symbol);
+        : this.resolvePrice(order.symbol, order.limitPrice);
 
     const fillPrice = this.applySlippage(basePrice, order.side);
     const notional = fillPrice * order.quantity;
