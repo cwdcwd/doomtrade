@@ -11,6 +11,7 @@ import { loadConfig } from "./config.js";
 import { openDatabase, persistDatabase } from "./db/database.js";
 import { DecisionStore } from "./decision/decision-store.js";
 import { SimulatedExchange } from "./executor/simulated.js";
+import { apiKeyAuth } from "./api/auth.js";
 import { TradeEngine } from "./engine/trade-engine.js";
 import { Portfolio } from "./portfolio/portfolio.js";
 import { createApiRouter } from "./api/routes.js";
@@ -120,6 +121,14 @@ async function main() {
 
   // Middleware
   app.use(express.json());
+
+  // API authentication — protects all /api routes except /api/health
+  // If DOOMTRADE_API_KEY is not set, auth is disabled (local dev only)
+  const authMiddleware = apiKeyAuth(config.apiKey);
+  app.use("/api", (req, res, next) => {
+    if (req.path === "/health") return next();
+    authMiddleware(req, res, next);
+  });
 
   // Serve dashboard static files
   app.use(express.static("public"));

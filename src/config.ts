@@ -31,6 +31,9 @@ const ConfigSchema = z.object({
   // Sim settings
   simStartingBalance: z.number().positive().default(100_000),
   simFeePct: z.number().nonnegative().default(0.1),
+
+  // API security
+  apiKey: z.string().default(""),
 });
 
 export type Config = z.infer<typeof ConfigSchema>;
@@ -56,6 +59,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     maxDrawdownPct: env.MAX_DRAWDOWN_PCT ? parseFloat(env.MAX_DRAWDOWN_PCT) : undefined,
     simStartingBalance: env.SIM_STARTING_BALANCE ? parseFloat(env.SIM_STARTING_BALANCE) : undefined,
     simFeePct: env.SIM_FEE_PCT ? parseFloat(env.SIM_FEE_PCT) : undefined,
+    apiKey: env.DOOMTRADE_API_KEY,
   });
 }
 
