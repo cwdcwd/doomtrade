@@ -315,17 +315,17 @@ class SqliteClient implements DbClient {
 
   async run(sql: string, params: unknown[] = []): Promise<void> {
     if (this.verbose) console.log("[sqlite] run:", sql, params);
-    this.db.run(sql, params as (string | number | null)[]);
+    this.db.run(sql.replace(/\{now\}/g, "datetime('now')"), params as (string | number | null)[]);
   }
 
   async exec(sql: string): Promise<void> {
     if (this.verbose) console.log("[sqlite] exec:", sql);
-    this.db.exec(sql);
+    this.db.exec(sql.replace(/\{now\}/g, "datetime('now')"));
   }
 
   async all<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
     if (this.verbose) console.log("[sqlite] all:", sql, params);
-    const stmt = this.db.prepare(sql);
+    const stmt = this.db.prepare(sql.replace(/\{now\}/g, "datetime('now')"));
     if (params.length > 0) {
       stmt.bind(params as (string | number | null)[]);
     }
@@ -339,7 +339,7 @@ class SqliteClient implements DbClient {
 
   async get<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T | null> {
     if (this.verbose) console.log("[sqlite] get:", sql, params);
-    const stmt = this.db.prepare(sql);
+    const stmt = this.db.prepare(sql.replace(/\{now\}/g, "datetime('now')"));
     if (params.length > 0) {
       stmt.bind(params as (string | number | null)[]);
     }

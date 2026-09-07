@@ -25,25 +25,26 @@ class PostgresClient implements DbClient {
   }
 
   async run(sql: string, params: unknown[] = []): Promise<void> {
-    const pgSql = convertPlaceholders(sql, "postgres");
+    const pgSql = convertPlaceholders(sql.replace(/\{now\}/g, "NOW()"), "postgres");
     if (this.verbose) console.log("[postgres] run:", pgSql, params);
     await this.client.query(pgSql, params as unknown[]);
   }
 
   async exec(sql: string): Promise<void> {
-    if (this.verbose) console.log("[postgres] exec:", sql);
-    await this.client.query(sql);
+    const pgSql = sql.replace(/\{now\}/g, "NOW()");
+    if (this.verbose) console.log("[postgres] exec:", pgSql);
+    await this.client.query(pgSql);
   }
 
   async all<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
-    const pgSql = convertPlaceholders(sql, "postgres");
+    const pgSql = convertPlaceholders(sql.replace(/\{now\}/g, "NOW()"), "postgres");
     if (this.verbose) console.log("[postgres] all:", pgSql, params);
     const result = await this.client.query(pgSql, params as unknown[]);
     return result.rows as T[];
   }
 
   async get<T = Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T | null> {
-    const pgSql = convertPlaceholders(sql, "postgres");
+    const pgSql = convertPlaceholders(sql.replace(/\{now\}/g, "NOW()"), "postgres");
     if (this.verbose) console.log("[postgres] get:", pgSql, params);
     const result = await this.client.query(pgSql, params as unknown[]);
     return result.rows[0] as T | null ?? null;

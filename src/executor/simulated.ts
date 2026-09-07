@@ -476,7 +476,7 @@ export class SimulatedExchange implements Executor {
     await execRun(
       this.db,
       `INSERT INTO sim_positions (symbol, quantity, avg_entry_price, side, updated_at)
-       VALUES (?, ?, ?, ?, datetime('now'))
+       VALUES (?, ?, ?, ?, {now})
        ON CONFLICT(symbol) DO UPDATE SET
          quantity = excluded.quantity,
          avg_entry_price = excluded.avg_entry_price,
@@ -489,7 +489,7 @@ export class SimulatedExchange implements Executor {
   private async updateBalance(cash: number, peakEquity: number): Promise<void> {
     await execRun(
       this.db,
-      "UPDATE sim_balance SET cash = ?, peak_equity = ?, updated_at = datetime('now') WHERE id = 1",
+      "UPDATE sim_balance SET cash = ?, peak_equity = ?, updated_at = {now} WHERE id = 1",
       [cash, peakEquity],
     );
   }
