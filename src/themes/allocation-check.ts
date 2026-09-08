@@ -28,9 +28,9 @@ export function isWithinAllocationLimit(
     return { allowed: false, reason: "No equity available" };
   }
 
-  // Check single-position limit
+  // Check single-position limit (allow equality — boundary case)
   const maxPerPosition = equity * (maxAllocationPct / 100);
-  if (buyValue > maxPerPosition) {
+  if (buyValue > maxPerPosition + 0.01) {
     return {
       allowed: false,
       reason: `Buy value $${buyValue.toFixed(2)} exceeds max position size $${maxPerPosition.toFixed(2)} (${maxAllocationPct}% of equity)`,
@@ -44,7 +44,7 @@ export function isWithinAllocationLimit(
   const maxTotalExposure = equity * (maxTotalAllocationPct / 100);
   const newTotalExposure = currentExposure + buyValue;
 
-  if (newTotalExposure > maxTotalExposure) {
+  if (newTotalExposure > maxTotalExposure + 0.01) {
     return {
       allowed: false,
       reason: `Total exposure $${newTotalExposure.toFixed(2)} would exceed max total allocation $${maxTotalExposure.toFixed(2)} (${maxTotalAllocationPct}% of equity)`,
