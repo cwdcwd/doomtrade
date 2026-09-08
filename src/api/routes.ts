@@ -758,6 +758,7 @@ export function createApiRouter(state: AppState): Router {
         "decisions",
         "portfolio_history",
         "sim_positions",
+        "sim_balance",
       ];
       for (const table of tables) {
         await db.exec(`DELETE FROM ${table}`);
