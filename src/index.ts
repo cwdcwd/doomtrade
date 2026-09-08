@@ -7,6 +7,9 @@
  */
 
 import express from "express";
+import { readFileSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath } from "node:url";
 import { loadConfig } from "./config.js";
 import { openDatabase, persistDatabase, closeDatabase } from "./db/database.js";
 import { DecisionStore } from "./decision/decision-store.js";
@@ -159,10 +162,9 @@ async function main() {
   // fetch calls authenticate when DOOMTRADE_API_KEY is set.
   // This MUST come before express.static so we intercept the root path.
   app.get("/", (req, res) => {
-    const fs = require("fs");
-    const path = require("path");
-    const htmlPath = path.join(__dirname, "..", "public", "index.html");
-    let html = fs.readFileSync(htmlPath, "utf-8");
+    const __dirname = dirname(fileURLToPath(import.meta.url));
+    const htmlPath = join(__dirname, "..", "public", "index.html");
+    let html = readFileSync(htmlPath, "utf-8");
     if (config.apiKey) {
       // Inject API key as a global variable before the dashboard script runs
       html = html.replace(
