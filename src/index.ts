@@ -17,6 +17,7 @@ import { Portfolio } from "./portfolio/portfolio.js";
 import { createApiRouter } from "./api/routes.js";
 import { createPublicCryptoMarketData, createMarketDataService } from "./market/market.js";
 import { ResearchService } from "./research/research.js";
+import { ThemeRunner } from "./themes/theme-runner.js";
 import type { Executor } from "./executor/executor.js";
 import type { PriceProvider } from "./engine/trade-engine.js";
 
@@ -105,6 +106,19 @@ async function main() {
   const decisionStore = new DecisionStore(db);
   const tradeEngine = new TradeEngine(db, executor, config, priceProvider);
 
+  // Theme runner for experimental strategies
+  const themeRunner = new ThemeRunner(db, {
+    decisionStore,
+    tradeEngine,
+    portfolio,
+    marketData,
+    redisUrl: config.redisUrl,
+    simFeeRate: config.simFeePct / 100,
+  });
+
+  // Start all enabled themes on boot
+  await themeRunner.startAll();
+
   // App state (mutable for mode toggle)
   const state = {
     decisionStore,
@@ -115,6 +129,7 @@ async function main() {
     modeChangedAt: Date.now(),
     marketData,
     research,
+    themeRunner,
   };
 
   const app = express();
@@ -174,6 +189,7 @@ async function main() {
   });
 
   process.on("SIGTERM", () => {
+    if (themeRunner) themeRunner.stopAll();
     if (config.databaseUrl) {
       closeDatabase(db);
     } else if (config.databasePath !== ":memory:") {
