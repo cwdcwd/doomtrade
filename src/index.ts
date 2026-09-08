@@ -66,6 +66,12 @@ async function createExecutor(
   return new SimulatedExchange(db, {
     initialCash: config.simStartingBalance,
     feeRate: config.simFeePct / 100,
+    getCurrentPrice: (symbol: string) => {
+      // Synchronous fallback — the TradeEngine passes a limitPrice on market
+      // orders (from the price provider), which resolvePrice uses as fallback.
+      // This cache is updated on every fill, so it's the last traded price.
+      return null;
+    },
   });
 }
 

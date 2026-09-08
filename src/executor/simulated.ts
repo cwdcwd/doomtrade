@@ -286,13 +286,13 @@ export class SimulatedExchange implements Executor {
     const providerPrice = this.getCurrentPrice(symbol);
     if (providerPrice !== null && providerPrice > 0) return providerPrice;
 
+    // Prefer the explicit fallback (from the trade engine's live price provider)
+    // over the stale price cache, which holds the last fill price and may
+    // not reflect current market conditions.
+    if (fallback && fallback > 0) return fallback;
+
     const cached = this.priceCache.get(symbol);
     if (cached) return cached;
-
-    // Note: position lookup must be done synchronously from the cache;
-    // async DB lookup would make resolvePrice async which is not feasible
-    // in the current design. Fall through to fallback.
-    if (fallback) return fallback;
 
     throw new Error(
       `No price available for ${symbol}. Provide a price provider or limit price.`,
