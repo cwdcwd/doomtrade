@@ -26,7 +26,7 @@ import type { AgentExchange } from "../executor/agent-exchange.js";
 import type { MarketDataService } from "../market/market.js";
 import type { ThemeStrategy, ThemeContext } from "../themes/strategy.js";
 import type { ThemeConfig, ThemeEvaluationResult } from "../themes/theme.js";
-import { execAll, execGet, convertPlaceholders } from "../db/database.js";
+import { execAll, execGet, execRun, convertPlaceholders } from "../db/database.js";
 
 export interface PipelineConfig {
   agentManager: AgentManager;
@@ -119,6 +119,12 @@ export class AgentTradingPipeline {
     const exchange = this.config.agentManager.getExchange(agentId);
     const balanceBefore = await exchange.getBalance();
     const equityBefore = balanceBefore.equity;
+
+    // Ensure the theme sub-account is initialized with the agent's capital.
+    // Strategies like momentum-rotation create a ThemeSubAccount using
+    // config.id as the theme ID — it must exist in theme_subaccounts or
+    // the strategy bails out with "no capital allocated".
+    await this.ensureSubAccount(agentId, equityBefore);
 
     // Build the theme config for this agent
     const config: ThemeConfig = {
@@ -229,6 +235,36 @@ export class AgentTradingPipeline {
         };
       default:
         return {};
+    }
+  }
+
+  /**
+   * Ensure the theme sub-account exists with the agent's current equity.
+   * Idempotent — if it already exists, the balance is updated to match
+   * the agent's actual equity (syncing the sub-account to reality).
+   */
+  private async ensureSubAccount(themeId: string, equity: number): Promise<void> {
+    const db = this.config.db;
+    const checkSql = convertPlaceholders(
+      "SELECT theme_id FROM theme_subaccounts WHERE theme_id = ?",
+      db.backend,
+    );
+    const existing = await execGet<{ theme_id: string }>(db, checkSql, [themeId]);
+
+    if (!existing) {
+      const insertSql = convertPlaceholders(
+        `INSERT INTO theme_subaccounts (theme_id, balance, peak_balance, starting_balance)
+         VALUES (?, ?, ?, ?)`,
+        db.backend,
+      );
+      await execRun(db, insertSql, [themeId, equity, equity, equity]);
+    } else {
+      // Sync the sub-account balance to the agent's actual cash
+      const updateSql = convertPlaceholders(
+        `UPDATE theme_subaccounts SET balance = ? WHERE theme_id = ?`,
+        db.backend,
+      );
+      await execRun(db, updateSql, [equity, themeId]);
     }
   }
 
