@@ -19,6 +19,9 @@ import { createPublicCryptoMarketData, createMarketDataService } from "./market/
 import { ResearchService } from "./research/research.js";
 import { ThemeRunner } from "./themes/theme-runner.js";
 import { CongressFollowerStrategy } from "./themes/strategies/congress-follower.js";
+import { MomentumRotationStrategy } from "./themes/strategies/momentum-rotation.js";
+import { AgentDrivenStrategy } from "./themes/strategies/agent-driven.js";
+import { AgentCoordinator } from "./integration/agent-integration.js";
 import type { Executor } from "./executor/executor.js";
 import type { PriceProvider } from "./engine/trade-engine.js";
 
@@ -122,6 +125,27 @@ async function main() {
 
   // Register built-in strategies
   themeRunner.registerStrategy(new CongressFollowerStrategy());
+  themeRunner.registerStrategy(new MomentumRotationStrategy());
+
+  // Agent-driven strategy requires an AgentCoordinator for A2A communication.
+  // The coordinator needs a peer endpoint — if not configured, skip registration.
+  if (config.a2aPeerEndpoint) {
+    try {
+      const coordinator = new AgentCoordinator(
+        decisionStore,
+        tradeEngine,
+        portfolio,
+        {
+          peerEndpoint: config.a2aPeerEndpoint,
+          peerToken: config.a2aPeerToken,
+          selfName: "doom",
+        },
+      );
+      themeRunner.registerStrategy(new AgentDrivenStrategy(coordinator, research));
+    } catch {
+      console.warn("AgentCoordinator initialization failed — agent-driven strategy not registered");
+    }
+  }
 
   // App state (mutable for mode toggle)
   const state = {

@@ -71,6 +71,25 @@
     .refresh-indicator { font-size: 12px; color: var(--muted); }
     .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 4px; }
     .dot-error { background: var(--red); }
+    /* Themes dashboard */
+    .theme-card { cursor: pointer; transition: border-color 0.2s; }
+    .theme-card:hover { border-color: var(--blue); }
+    .theme-strategy-tag { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; background: rgba(88,166,255,0.15); color: var(--blue); }
+    .theme-status-active { color: var(--green); }
+    .theme-status-paused { color: var(--yellow); }
+    .theme-status-stopped { color: var(--muted); }
+    .theme-detail { margin-top: 12px; }
+    .theme-detail table { font-size: 13px; }
+    .audit-step { display: flex; align-items: center; gap: 8px; padding: 4px 0; }
+    .audit-arrow { color: var(--muted); font-size: 12px; }
+    .audit-signal { color: var(--blue); }
+    .audit-decision { color: var(--purple); }
+    .audit-trade { color: var(--green); }
+    .theme-comparison-chart { width: 100%; height: 160px; }
+    .theme-tab { display: inline-block; padding: 4px 12px; border-radius: 4px 4px 0 0; background: var(--card); border: 1px solid var(--border); border-bottom: none; cursor: pointer; font-size: 13px; }
+    .theme-tab.active { background: var(--blue); color: #fff; border-color: var(--blue); }
+    .theme-tab-content { display: none; }
+    .theme-tab-content.active { display: block; }
   </style>
 </head>
 <body>
@@ -154,6 +173,32 @@
     <div class="card">
       <div id="trades-container">
         <div class="empty">Loading...</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Themes Dashboard ─────────────────────────────────────── -->
+  <div class="section">
+    <div class="section-title">Experimental Themes — Comparison</div>
+    <div class="card">
+      <div id="themes-comparison-container">
+        <div class="empty">Loading themes...</div>
+      </div>
+    </div>
+    <div class="card" style="margin-top: 12px;">
+      <canvas id="theme-comparison-chart" class="theme-comparison-chart"></canvas>
+    </div>
+  </div>
+
+  <!-- Themes Detail / Audit Trail -->
+  <div class="section">
+    <div class="section-title">Theme Audit Trail</div>
+    <div class="card">
+      <div id="themes-tabs-container">
+        <div class="empty">Loading...</div>
+      </div>
+      <div id="themes-detail-container" style="margin-top: 12px;">
+        <div class="empty">Select a theme to view its audit trail.</div>
       </div>
     </div>
   </div>
@@ -344,6 +389,261 @@
 
     // Initial fetch + poll
     fetchDashboard();
+    fetchThemes();
     setInterval(fetchDashboard, 5000);
+    setInterval(fetchThemes, 10000);
+
+    // ── Themes Dashboard ────────────────────────────────────────
+
+    let themesCache = [];
+    let activeThemeTab = null;
+
+    async function fetchThemes() {
+      try {
+        const themesResp = await fetch('/api/themes?limit=50');
+        if (!themesResp.ok) {
+          document.getElementById('themes-comparison-container').innerHTML =
+            '<div class="empty">Themes API not available</div>';
+          return;
+        }
+        const themesData = await themesResp.json();
+        const themes = themesData.themes || [];
+        themesCache = themes;
+
+        // Render comparison table
+        document.getElementById('themes-comparison-container').innerHTML =
+          renderThemesComparison(themes);
+
+        // Render tabs
+        document.getElementById('themes-tabs-container').innerHTML =
+          renderThemeTabs(themes);
+
+        // Fetch performance for each theme in parallel
+        const perfResults = await Promise.allSettled(
+          themes.map(t => fetchThemePerformance(t.id))
+        );
+        const performances = perfResults.map((r, i) =>
+          r.status === 'fulfilled' ? r.value : null
+        );
+
+        // Update comparison table with P&L data
+        updateComparisonWithPerf(themes, performances);
+
+        // Draw comparison chart
+        drawThemeComparisonChart(themes, performances);
+
+        // If active tab is set, re-render its detail
+        if (activeThemeTab) {
+          const perf = performances[themes.findIndex(t => t.id === activeThemeTab)];
+          renderThemeDetail(activeThemeTab, perf);
+        }
+      } catch (e) {
+        console.error('Themes fetch error:', e);
+        document.getElementById('themes-comparison-container').innerHTML =
+          '<div class="empty">Error loading themes: ' + esc(e.message) + '</div>';
+      }
+    }
+
+    async function fetchThemePerformance(themeId) {
+      const resp = await fetch('/api/themes/' + encodeURIComponent(themeId) + '/performance');
+      if (!resp.ok) return null;
+      const data = await resp.json();
+      return data.performance || null;
+    }
+
+    async function fetchThemeEvaluations(themeId) {
+      const resp = await fetch('/api/themes/' + encodeURIComponent(themeId) + '/evaluations?limit=20');
+      if (!resp.ok) return [];
+      const data = await resp.json();
+      return data.evaluations || [];
+    }
+
+    function renderThemesComparison(themes) {
+      if (!themes.length) return '<div class="empty">No themes configured. Create one via POST /api/themes</div>';
+      let html = '<table><tr><th>Name</th><th>Strategy</th><th>Mode</th><th>Status</th><th>Capital</th><th>P&amp;L</th><th>DD%</th><th>Trades</th><th>Positions</th></tr>';
+      for (const t of themes) {
+        const status = t.enabled ? 'active' : 'stopped';
+        const statusClass = 'theme-status-' + status;
+        html += '<tr class="theme-card" id="theme-row-' + esc(t.id) + '" onclick="selectTheme(\'' + esc(t.id) + '\')">'
+          + '<td><strong>' + esc(t.name) + '</strong></td>'
+          + '<td><span class="theme-strategy-tag">' + esc(t.strategy) + '</span></td>'
+          + '<td>' + esc(t.mode).toUpperCase() + '</td>'
+          + '<td class="' + statusClass + '">' + status.toUpperCase() + '</td>'
+          + '<td>$' + Number(t.allocatedCapital || 0).toFixed(0) + '</td>'
+          + '<td id="theme-pnl-' + esc(t.id) + '">—</td>'
+          + '<td id="theme-dd-' + esc(t.id) + '">—</td>'
+          + '<td id="theme-trades-' + esc(t.id) + '">—</td>'
+          + '<td id="theme-positions-' + esc(t.id) + '">—</td>'
+          + '</tr>';
+      }
+      html += '</table>';
+      return html;
+    }
+
+    function updateComparisonWithPerf(themes, performances) {
+      for (let i = 0; i < themes.length; i++) {
+        const perf = performances[i];
+        const id = themes[i].id;
+        if (!perf) continue;
+
+        const pnl = perf.realizedPnl || 0;
+        const pnlClass = pnl >= 0 ? 'positive' : 'negative';
+        const pnlEl = document.getElementById('theme-pnl-' + id);
+        if (pnlEl) pnlEl.innerHTML = '<span class="' + pnlClass + '">' + (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(2) + '</span>';
+
+        const ddEl = document.getElementById('theme-dd-' + id);
+        if (ddEl) ddEl.textContent = (perf.drawdownPct || 0).toFixed(1) + '%';
+
+        const tradesEl = document.getElementById('theme-trades-' + id);
+        if (tradesEl) tradesEl.textContent = (perf.filledTrades || 0) + '/' + (perf.totalTrades || 0);
+
+        const posEl = document.getElementById('theme-positions-' + id);
+        if (posEl) posEl.textContent = perf.openPositions || 0;
+      }
+    }
+
+    function renderThemeTabs(themes) {
+      if (!themes.length) return '<div class="empty">No themes</div>';
+      return themes.map(t =>
+        '<span class="theme-tab" id="theme-tab-' + esc(t.id) + '" onclick="selectTheme(\'' + esc(t.id) + '\')">' + esc(t.name) + '</span>'
+      ).join(' ');
+    }
+
+    window.selectTheme = async function(themeId) {
+      activeThemeTab = themeId;
+
+      // Update tab highlighting
+      document.querySelectorAll('.theme-tab').forEach(el => el.classList.remove('active'));
+      const tab = document.getElementById('theme-tab-' + themeId);
+      if (tab) tab.classList.add('active');
+
+      // Fetch performance + evaluations
+      const perf = await fetchThemePerformance(themeId);
+      renderThemeDetail(themeId, perf);
+    };
+
+    async function renderThemeDetail(themeId, perf) {
+      const container = document.getElementById('themes-detail-container');
+      if (!container) return;
+
+      const evaluations = await fetchThemeEvaluations(themeId);
+      const theme = themesCache.find(t => t.id === themeId);
+      if (!theme) {
+        container.innerHTML = '<div class="empty">Theme not found</div>';
+        return;
+      }
+
+      let html = '<div class="theme-detail">';
+
+      // Performance summary
+      if (perf) {
+        html += '<table style="margin-bottom:16px;">'
+          + '<tr><th>Starting Balance</th><th>Current Balance</th><th>Peak</th><th>Drawdown</th><th>Realized P&amp;L</th><th>Win Rate</th></tr>'
+          + '<tr>'
+          + '<td>$' + (perf.startingBalance || 0).toFixed(2) + '</td>'
+          + '<td>$' + (perf.currentBalance || 0).toFixed(2) + '</td>'
+          + '<td>$' + (perf.peakBalance || 0).toFixed(2) + '</td>'
+          + '<td>' + (perf.drawdownPct || 0).toFixed(1) + '%</td>'
+          + '<td class="' + ((perf.realizedPnl || 0) >= 0 ? 'positive' : 'negative') + '">'
+          + ((perf.realizedPnl || 0) >= 0 ? '+' : '') + '$' + (perf.realizedPnl || 0).toFixed(2) + '</td>'
+          + '<td>' + ((perf.winRate || 0) * 100).toFixed(1) + '%</td>'
+          + '</tr></table>';
+      }
+
+      // Evaluation history (audit trail)
+      if (evaluations.length === 0) {
+        html += '<div class="empty">No evaluations yet. Trigger one via POST /api/themes/' + esc(themeId) + '/evaluate</div>';
+      } else {
+        html += '<div class="section-title" style="font-size:14px;">Evaluation History (Audit Trail)</div>';
+        html += '<table><tr><th>Timestamp</th><th>Signals</th><th>Decisions</th><th>Trades</th><th>Errors</th></tr>';
+        for (const ev of evaluations) {
+          const time = new Date(ev.timestamp).toLocaleString();
+          const errors = ev.errors && ev.errors.length > 0
+            ? '<span class="negative">' + ev.errors.length + ' error(s)</span>'
+            : '<span class="positive">OK</span>';
+          html += '<tr>'
+            + '<td>' + esc(time) + '</td>'
+            + '<td>' + (ev.signalsCount || 0) + '</td>'
+            + '<td>' + (ev.decisionsCount || 0) + '</td>'
+            + '<td>' + (ev.tradesCount || 0) + '</td>'
+            + '<td>' + errors + '</td>'
+            + '</tr>';
+        }
+        html += '</table>';
+      }
+
+      html += '</div>';
+      container.innerHTML = html;
+    }
+
+    function drawThemeComparisonChart(themes, performances) {
+      const canvas = document.getElementById('theme-comparison-chart');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      const w = canvas.width = canvas.offsetWidth;
+      const h = 160;
+
+      ctx.clearRect(0, 0, w, h);
+
+      // Background grid
+      ctx.strokeStyle = '#30363d';
+      ctx.lineWidth = 1;
+      for (let i = 0; i <= 3; i++) {
+        const y = (h / 3) * i;
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(w, y);
+        ctx.stroke();
+      }
+
+      // Zero line
+      const midY = h / 2;
+      ctx.strokeStyle = '#30363d';
+      ctx.setLineDash([4, 4]);
+      ctx.beginPath();
+      ctx.moveTo(0, midY);
+      ctx.lineTo(w, midY);
+      ctx.stroke();
+      ctx.setLineDash([]);
+
+      if (!themes.length || !performances.some(p => p)) return;
+
+      // Compute P&L for each theme
+      const pnls = themes.map((t, i) => {
+        const perf = performances[i];
+        return perf ? (perf.realizedPnl || 0) : 0;
+      });
+
+      const maxAbs = Math.max(...pnls.map(p => Math.abs(p)), 1);
+      const barWidth = Math.min(60, (w - 40) / themes.length - 8);
+      const gap = (w - 40) / themes.length;
+      const colors = ['#58a6ff', '#3fb950', '#bc8cff', '#d29922', '#f85149', '#39c5cf'];
+
+      for (let i = 0; i < themes.length; i++) {
+        const x = 20 + gap * i + (gap - barWidth) / 2;
+        const pnl = pnls[i];
+        const barHeight = (Math.abs(pnl) / maxAbs) * (h / 2 - 20);
+        const barY = pnl >= 0 ? midY - barHeight : midY;
+
+        ctx.fillStyle = pnl >= 0 ? colors[i % colors.length] : '#f85149';
+        ctx.fillRect(x, barY, barWidth, barHeight);
+
+        // Label
+        ctx.fillStyle = '#8b949e';
+        ctx.font = '10px sans-serif';
+        ctx.textAlign = 'center';
+        const label = themes[i].name.length > 12
+          ? themes[i].name.slice(0, 10) + '…'
+          : themes[i].name;
+        ctx.fillText(label, x + barWidth / 2, h - 4);
+        ctx.textAlign = 'left';
+
+        // P&L value
+        ctx.fillStyle = pnl >= 0 ? '#3fb950' : '#f85149';
+        ctx.font = '10px sans-serif';
+        const pnlLabel = (pnl >= 0 ? '+' : '') + '$' + pnl.toFixed(0);
+        ctx.fillText(pnlLabel, x, barY - 4);
+      }
+    }
   </script>
 </body>

@@ -36,6 +36,10 @@ const ConfigSchema = z.object({
   // Redis (for BullMQ theme scheduling)
   redisUrl: z.string().default(""),
 
+  // A2A agent coordination
+  a2aPeerEndpoint: z.string().default(""),
+  a2aPeerToken: z.string().default(""),
+
   // API security
   apiKey: z.string().default(""),
 });
@@ -65,6 +69,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     simStartingBalance: env.SIM_STARTING_BALANCE ? parseFloat(env.SIM_STARTING_BALANCE) : undefined,
     simFeePct: env.SIM_FEE_PCT ? parseFloat(env.SIM_FEE_PCT) : undefined,
     redisUrl: env.REDIS_URL,
+    a2aPeerEndpoint: env.A2A_PEER_ENDPOINT,
+    a2aPeerToken: env.A2A_PEER_TOKEN,
     apiKey: env.DOOMTRADE_API_KEY,
   });
 }
