@@ -158,6 +158,48 @@ async function main() {
   // Serve dashboard static files
   app.use(express.static("public"));
 
+  // Dashboard route — injects API key into the page so the dashboard's
+  // fetch calls authenticate when DOOMTRADE_API_KEY is set
+  app.get("/", (req, res) => {
+    const fs = require("fs");
+    const path = require("path");
+    const htmlPath = path.join(__dirname, "..", "public", "index.html");
+    let html = fs.readFileSync(htmlPath, "utf-8");
+    if (config.apiKey) {
+      // Inject API key as a global variable before the dashboard script runs
+      html = html.replace(
+        "<script type=\"module\">",
+        `<script>window.DOOMTRADE_API_KEY = ${JSON.stringify(config.apiKey)};</script>\n    <script type="module">`,
+      );
+      // Add Authorization header to all fetch calls
+      html = html.replace(
+        "fetch('/api/portfolio'),",
+        "fetch('/api/portfolio', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
+      );
+      html = html.replace(
+        "fetch('/api/positions'),",
+        "fetch('/api/positions', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
+      );
+      html = html.replace(
+        "fetch('/api/decisions?limit=10'),",
+        "fetch('/api/decisions?limit=10', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
+      );
+      html = html.replace(
+        "fetch('/api/trades?limit=10'),",
+        "fetch('/api/trades?limit=10', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
+      );
+      html = html.replace(
+        "fetch('/api/portfolio/history'),",
+        "fetch('/api/portfolio/history', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
+      );
+      html = html.replace(
+        "const themesResp = await fetch('/api/themes');",
+        "const themesResp = await fetch('/api/themes', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } });",
+      );
+    }
+    res.send(html);
+  });
+
   // Health check — used by Railway for deployment healthchecks
   app.get("/health", (_req, res) => {
     res.json({
