@@ -22,6 +22,7 @@ import type { ThemeStrategy, ThemeContext } from "../strategy.js";
 import type { ThemeConfig, ThemeEvaluationResult, ThemeSignal } from "../theme.js";
 import { AgentSignalSource } from "../sources/agent-signal.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
+import { ThemeStore } from "../theme-store.js";
 
 interface AgentDrivenParams {
   agentEndpoint: string;
@@ -149,18 +150,16 @@ export class AgentDrivenStrategy implements ThemeStrategy {
         }
       }
 
-      // Record signal for dedup
+      // Record signal for dedup (fixes #35 — uses ThemeStore instead of
+      // SQLite-only INSERT OR IGNORE; ThemeStore uses convertPlaceholders)
       const signalHash = `agent-${signal.symbol}-${signal.action}-${timestamp}`;
-      await ctx.db.run(
-        `INSERT OR IGNORE INTO theme_signals (id, theme_id, signal_hash, symbol, action, metadata) VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          randomUUID(),
-          config.id,
-          signalHash,
-          signal.symbol,
-          signal.action,
-          JSON.stringify({ source: "agent", ...signal.metadata }),
-        ],
+      const store = new ThemeStore(ctx.db);
+      await store.recordSignal(
+        config.id,
+        signalHash,
+        signal.symbol,
+        signal.action,
+        { source: "agent", ...signal.metadata } as Record<string, unknown>,
       );
 
       // Place order

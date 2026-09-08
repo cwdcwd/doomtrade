@@ -119,11 +119,14 @@ async function main() {
     simFeeRate: config.simFeePct / 100,
   });
 
+  // Register built-in strategies BEFORE startAll() so themes can
+  // resolve their strategy on the first tick (fixes #30, #31)
+  themeRunner.registerStrategy(new CongressFollowerStrategy());
+  themeRunner.registerStrategy(new MomentumRotationStrategy());
+  themeRunner.registerStrategy(new AgentDrivenStrategy());
+
   // Start all enabled themes on boot
   await themeRunner.startAll();
-
-  // Register built-in strategies
-  themeRunner.registerStrategy(new CongressFollowerStrategy());
 
   // App state (mutable for mode toggle)
   const state = {

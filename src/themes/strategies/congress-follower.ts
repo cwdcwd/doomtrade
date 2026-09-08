@@ -20,6 +20,7 @@ import type { ThemeStrategy, ThemeContext } from "../strategy.js";
 import type { ThemeConfig, ThemeEvaluationResult, ThemeSignal } from "../theme.js";
 import { CongressTradesSignalSource } from "../sources/congress-trades.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
+import { ThemeStore } from "../theme-store.js";
 
 interface CongressFollowerParams {
   politician: string;
@@ -71,16 +72,14 @@ export class CongressFollowerStrategy implements ThemeStrategy {
       };
     }
 
-    // Deduplicate: filter out signals already processed
+    // Deduplicate: filter out signals already processed (fixes #34)
+    const store = new ThemeStore(ctx.db);
     const newSignals: ThemeSignal[] = [];
     for (const signal of signals) {
       const meta = signal.metadata as Record<string, unknown>;
       const signalHash = `${meta.member_slug}-${signal.symbol}-${meta.transaction_date}-${signal.action}`;
-      const processed = await ctx.db.all<{ "1": number }>(
-        `SELECT 1 FROM theme_signals WHERE theme_id = ? AND signal_hash = ?`,
-        [config.id, signalHash],
-      );
-      if (processed.length === 0) {
+      const processed = await store.isSignalProcessed(config.id, signalHash);
+      if (!processed) {
         newSignals.push(signal);
       }
     }
@@ -153,20 +152,11 @@ export class CongressFollowerStrategy implements ThemeStrategy {
         continue;
       }
 
-      // Record signal for dedup
+      // Record signal for dedup (fixes #34 — uses ThemeStore with convertPlaceholders)
       const meta = signal.metadata as Record<string, unknown>;
       const signalHash = `${meta.member_slug}-${signal.symbol}-${meta.transaction_date}-${signal.action}`;
-      await ctx.db.run(
-        `INSERT INTO theme_signals (id, theme_id, signal_hash, symbol, action, metadata) VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          randomUUID(),
-          config.id,
-          signalHash,
-          signal.symbol,
-          signal.action,
-          JSON.stringify(signal.metadata ?? {}),
-        ],
-      );
+      const store = new ThemeStore(ctx.db);
+      await store.recordSignal(config.id, signalHash, signal.symbol, signal.action, signal.metadata as Record<string, unknown>);
 
       // Place order via sub-account — pass signal price as limitPrice
       // so the sub-account doesn't need a price provider

@@ -24,6 +24,7 @@ import type { ThemeConfig, ThemeEvaluationResult, ThemeSignal } from "../theme.j
 import type { MarketDataService, Bar, Timeframe } from "../../market/market.js";
 import { smaCrossover, rsiSignal, type Signal } from "../../research/indicators.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
+import { ThemeStore } from "../theme-store.js";
 
 // ── Config types (mirrors momentum-screen.ts for self-containment) ──
 
@@ -379,21 +380,20 @@ export class MomentumRotationStrategy implements ThemeStrategy {
 
   /**
    * Check if a signal has already been processed (dedup).
+   * Uses ThemeStore which handles placeholder conversion (fixes #34).
    */
   private async isSignalProcessed(
     ctx: ThemeContext,
     themeId: string,
     signalHash: string,
   ): Promise<boolean> {
-    const rows = await ctx.db.all<{ "1": number }>(
-      "SELECT 1 FROM theme_signals WHERE theme_id = ? AND signal_hash = ?",
-      [themeId, signalHash],
-    );
-    return rows.length > 0;
+    const store = new ThemeStore(ctx.db);
+    return store.isSignalProcessed(themeId, signalHash);
   }
 
   /**
    * Record a processed signal for dedup.
+   * Uses ThemeStore which handles placeholder conversion (fixes #34).
    */
   private async recordSignal(
     ctx: ThemeContext,
@@ -402,9 +402,7 @@ export class MomentumRotationStrategy implements ThemeStrategy {
     symbol: string,
     action: string,
   ): Promise<void> {
-    await ctx.db.run(
-      "INSERT INTO theme_signals (id, theme_id, signal_hash, symbol, action, metadata) VALUES (?, ?, ?, ?, ?, ?)",
-      [randomUUID(), themeId, signalHash, symbol, action, null],
-    );
+    const store = new ThemeStore(ctx.db);
+    await store.recordSignal(themeId, signalHash, symbol, action);
   }
 }
