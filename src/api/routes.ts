@@ -63,6 +63,8 @@ export interface AppState {
   themeRunner?: ThemeRunner;
   /** Database instance for direct access (theme store, etc.) */
   db: import("../db/database.js").Database;
+  /** Agent manager for per-agent portfolios */
+  agentManager?: import("../agent/agent-manager.js").AgentManager;
 }
 
 // ── Mode toggle cooldown (seconds) ──────────────────────────────

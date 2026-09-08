@@ -24,6 +24,7 @@ import { ThemeRunner } from "./themes/theme-runner.js";
 import { CongressFollowerStrategy } from "./themes/strategies/congress-follower.js";
 import { MomentumRotationStrategy } from "./themes/strategies/momentum-rotation.js";
 import { AgentDrivenStrategy } from "./themes/strategies/agent-driven.js";
+import { AgentManager } from "./agent/agent-manager.js";
 import type { Executor } from "./executor/executor.js";
 import type { PriceProvider } from "./engine/trade-engine.js";
 
@@ -118,6 +119,19 @@ async function main() {
   const decisionStore = new DecisionStore(db);
   const tradeEngine = new TradeEngine(db, executor, config, priceProvider);
 
+  // Agent manager — per-agent portfolios with independent balances
+  const agentManager = new AgentManager(db, {
+    defaultStartingBalance: config.simStartingBalance,
+    feeRate: config.simFeePct / 100,
+  });
+
+  // Pre-seed default agents
+  await agentManager.seedDefaults([
+    { name: "Doom", startingBalance: config.simStartingBalance, strategy: "momentum-rotation" },
+    { name: "Kangbot", startingBalance: config.simStartingBalance, strategy: "congress-follower" },
+    { name: "ThanosBot", startingBalance: config.simStartingBalance, strategy: "agent-driven" },
+  ]);
+
   // Theme runner for experimental strategies
   const themeRunner = new ThemeRunner(db, {
     decisionStore,
@@ -149,6 +163,7 @@ async function main() {
     research,
     themeRunner,
     db,
+    agentManager,
   };
 
   const app = express();
