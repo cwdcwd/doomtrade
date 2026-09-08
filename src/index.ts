@@ -18,6 +18,7 @@ import { createApiRouter } from "./api/routes.js";
 import { createPublicCryptoMarketData, createMarketDataService } from "./market/market.js";
 import { ResearchService } from "./research/research.js";
 import { ThemeRunner } from "./themes/theme-runner.js";
+import { CongressFollowerStrategy } from "./themes/strategies/congress-follower.js";
 import type { Executor } from "./executor/executor.js";
 import type { PriceProvider } from "./engine/trade-engine.js";
 
@@ -118,6 +119,9 @@ async function main() {
 
   // Start all enabled themes on boot
   await themeRunner.startAll();
+
+  // Register built-in strategies
+  themeRunner.registerStrategy(new CongressFollowerStrategy());
 
   // App state (mutable for mode toggle)
   const state = {
