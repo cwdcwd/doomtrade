@@ -328,7 +328,7 @@ function renderDashboard() {
 function renderAgentCard(d) {
   const a = d.agent;
   const port = d.portfolio?.portfolio || {};
-  const p equity = port.equity || a.equity || a.cash || 0;
+  const equity = port.equity || a.equity || a.cash || 0;
   const cash = port.cash ?? a.cash ?? 0;
   const initBal = a.initialBalance || a.starting_balance || 100;
   const pnl = equity - initBal;
