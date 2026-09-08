@@ -3,450 +3,469 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DoomTrade Dashboard</title>
-  <script type="module" src="https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.3/bundles/datastar.js"></script>
+  <title>DoomTrade — Agent Trading Dashboard</title>
   <style>
     :root {
-      --bg: #0d1117;
-      --card: #161b22;
-      --border: #30363d;
-      --text: #e6edf3;
-      --muted: #8b949e;
-      --green: #3fb950;
-      --red: #f85149;
-      --blue: #58a6ff;
-      --yellow: #d29922;
-      --purple: #bc8cff;
+      --bg: #0a0e14;
+      --surface: #11161e;
+      --surface2: #161c26;
+      --border: #1e2632;
+      --border-light: #2a3441;
+      --text: #d4dae0;
+      --muted: #6b7684;
+      --dim: #4a5462;
+      --green: #26d07c;
+      --red: #f04444;
+      --blue: #4c8dff;
+      --yellow: #f5a623;
+      --purple: #b884ff;
+      --cyan: #2dd4d4;
+      --accent: #26d07c;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
-      padding: 20px;
-      max-width: 1200px;
-      margin: 0 auto;
+      font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 13px;
+      line-height: 1.5;
+      padding: 0;
+      min-height: 100vh;
     }
-    h1 { font-size: 24px; margin-bottom: 4px; }
-    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+    .mono { font-family: inherit; }
+    .sans { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+
+    /* ── Layout ───────────────────────────────── */
+    .app { max-width: 1400px; margin: 0 auto; padding: 16px; }
+
+    /* ── Header ───────────────────────────────── */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 12px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+    }
+    .header-left { display: flex; align-items: center; gap: 12px; }
+    .logo {
+      font-size: 18px; font-weight: 700; letter-spacing: -0.5px;
+      background: linear-gradient(135deg, var(--green), var(--cyan));
+      -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+    }
+    .header-sub { font-size: 11px; color: var(--muted); }
+    .header-right { display: flex; align-items: center; gap: 12px; }
+    .status-dot {
+      width: 7px; height: 7px; border-radius: 50%; background: var(--green);
+      box-shadow: 0 0 8px rgba(38,208,124,0.5);
+    }
+    .status-dot.error { background: var(--red); box-shadow: 0 0 8px rgba(240,68,68,0.5); }
+    .last-update { font-size: 11px; color: var(--muted); }
     .mode-badge {
-      padding: 4px 12px;
-      border-radius: 12px;
-      font-size: 12px;
-      font-weight: 700;
-      text-transform: uppercase;
+      padding: 3px 10px; border-radius: 4px; font-size: 10px; font-weight: 700;
+      text-transform: uppercase; letter-spacing: 1px;
     }
-    .mode-sim { background: var(--yellow); color: #000; }
-    .mode-live { background: var(--red); color: #fff; animation: pulse 2s infinite; }
-    @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.7; } }
-    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
-    .card {
-      background: var(--card);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 16px;
+    .mode-sim { background: rgba(245,166,35,0.15); color: var(--yellow); border: 1px solid rgba(245,166,35,0.3); }
+    .mode-live { background: rgba(240,68,68,0.15); color: var(--red); border: 1px solid rgba(240,68,68,0.3); }
+
+    /* ── Toolbar ──────────────────────────────── */
+    .toolbar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    .btn {
+      padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      border: 1px solid var(--border-light); background: var(--surface);
+      color: var(--text); cursor: pointer; transition: all 0.15s;
+      font-family: inherit;
     }
-    .card-label { font-size: 12px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
-    .card-value { font-size: 28px; font-weight: 700; }
-    .card-sub { font-size: 13px; color: var(--muted); margin-top: 2px; }
+    .btn:hover { background: var(--surface2); border-color: var(--accent); }
+    .btn-primary { background: rgba(38,208,124,0.1); border-color: rgba(38,208,124,0.3); color: var(--green); }
+    .btn-primary:hover { background: rgba(38,208,124,0.2); }
+    .btn-danger { background: rgba(240,68,68,0.1); border-color: rgba(240,68,68,0.3); color: var(--red); }
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .btn-loading { opacity: 0.6; pointer-events: none; }
+
+    /* ── Agent Cards ──────────────────────────── */
+    .agents-grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      gap: 12px; margin-bottom: 20px;
+    }
+    .agent-card {
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: 10px; overflow: hidden; transition: border-color 0.2s;
+    }
+    .agent-card:hover { border-color: var(--border-light); }
+    .agent-card.expanded { border-color: rgba(38,208,124,0.2); }
+    .agent-header {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; cursor: pointer; user-select: none;
+    }
+    .agent-name-row { display: flex; align-items: center; gap: 10px; }
+    .agent-rank {
+      width: 24px; height: 24px; border-radius: 6px; display: flex;
+      align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
+      background: var(--surface2); color: var(--muted);
+    }
+    .agent-rank.rank-1 { background: rgba(245,166,35,0.15); color: var(--yellow); }
+    .agent-rank.rank-2 { background: rgba(173,173,173,0.15); color: #c0c0c0; }
+    .agent-rank.rank-3 { background: rgba(205,127,50,0.15); color: #cd7f32; }
+    .agent-name { font-size: 14px; font-weight: 700; }
+    .agent-strategy { font-size: 11px; color: var(--muted); }
+    .agent-stats { display: flex; gap: 16px; align-items: center; }
+    .agent-stat { text-align: right; }
+    .agent-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
+    .agent-stat-value { font-size: 15px; font-weight: 700; }
+    .agent-pnl { font-size: 12px; font-weight: 600; }
     .positive { color: var(--green); }
     .negative { color: var(--red); }
-    table { width: 100%; border-collapse: collapse; font-size: 14px; }
-    th { text-align: left; padding: 8px 12px; border-bottom: 1px solid var(--border); color: var(--muted); font-size: 12px; text-transform: uppercase; }
-    td { padding: 8px 12px; border-bottom: 1px solid var(--border); }
-    tr:hover { background: rgba(255,255,255,0.03); }
-    .section { margin-bottom: 32px; }
-    .section-title { font-size: 16px; font-weight: 600; margin-bottom: 12px; }
-    .rationale { color: var(--muted); font-style: italic; font-size: 13px; }
-    .confidence { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 12px; }
-    .conf-high { background: rgba(63,185,80,0.2); color: var(--green); }
-    .conf-med { background: rgba(210,153,34,0.2); color: var(--yellow); }
-    .conf-low { background: rgba(248,81,73,0.2); color: var(--red); }
-    .status-filled { color: var(--green); }
-    .status-rejected { color: var(--red); }
-    .status-pending { color: var(--yellow); }
-    #equity-chart { width: 100%; height: 200px; }
-    .empty { color: var(--muted); padding: 24px; text-align: center; }
-    .agent-tag { color: var(--purple); font-size: 12px; }
-    .refresh-indicator { font-size: 12px; color: var(--muted); }
-    .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: var(--green); margin-right: 4px; }
-    .dot-error { background: var(--red); }
+    .neutral { color: var(--muted); }
+
+    .agent-body {
+      display: none; padding: 0 16px 16px;
+      border-top: 1px solid var(--border);
+    }
+    .agent-card.expanded .agent-body { display: block; }
+
+    .agent-metrics {
+      display: grid; grid-template-columns: repeat(4, 1fr);
+      gap: 8px; margin: 12px 0;
+    }
+    .metric {
+      background: var(--surface2); border-radius: 6px; padding: 8px 10px;
+    }
+    .metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 2px; }
+    .metric-value { font-size: 13px; font-weight: 600; }
+
+    /* ── Mini Table ───────────────────────────── */
+    .mini-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
+    .mini-table th {
+      text-align: left; padding: 6px 8px; color: var(--muted);
+      font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+    .mini-table td {
+      padding: 6px 8px; border-bottom: 1px solid var(--border);
+    }
+    .mini-table tr:hover { background: rgba(255,255,255,0.02); }
+    .mini-table .empty-row { color: var(--dim); text-align: center; padding: 16px; }
+
+    .sub-section-title {
+      font-size: 11px; font-weight: 600; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.5px; margin-top: 12px;
+      display: flex; align-items: center; gap: 6px;
+    }
+    .sub-section-title::before {
+      content: ''; width: 3px; height: 12px; border-radius: 2px; background: var(--accent);
+    }
+
+    /* ── Agent Action Bar ─────────────────────── */
+    .agent-actions { display: flex; gap: 6px; margin-top: 10px; }
+    .btn-sm {
+      padding: 4px 10px; font-size: 11px; border-radius: 4px;
+      border: 1px solid var(--border-light); background: var(--surface2);
+      color: var(--text); cursor: pointer; transition: all 0.15s;
+      font-family: inherit; font-weight: 600;
+    }
+    .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
+    .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    /* ── Toast ────────────────────────────────── */
+    .toast {
+      position: fixed; bottom: 20px; right: 20px;
+      background: var(--surface); border: 1px solid var(--border-light);
+      border-radius: 8px; padding: 12px 16px; font-size: 12px;
+      max-width: 400px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+      transform: translateY(100px); opacity: 0; transition: all 0.3s;
+      z-index: 1000;
+    }
+    .toast.show { transform: translateY(0); opacity: 1; }
+    .toast.success { border-color: rgba(38,208,124,0.3); }
+    .toast.error { border-color: rgba(240,68,68,0.3); }
+
+    /* ── Equity Sparkline ─────────────────────── */
+    .sparkline { width: 60px; height: 20px; display: inline-block; vertical-align: middle; }
+
+    /* ── Responsive ───────────────────────────── */
+    @media (max-width: 900px) {
+      .agents-grid { grid-template-columns: 1fr; }
+      .agent-metrics { grid-template-columns: repeat(2, 1fr); }
+    }
   </style>
 </head>
 <body>
-  <!-- Scalar signals managed by Datastar mergePatch -->
-  <div data-signals="{mode: '...', equity: '...', cash: '...', positionsValue: '...', pnlTotal: '...', pnlPct: '...', exposure: '...', positionCount: '...', lastUpdate: '...'}">
+<div class="app">
 
   <!-- Header -->
   <div class="header">
-    <div>
-      <h1>DoomTrade</h1>
-      <div class="refresh-indicator">
-        <span class="dot" id="status-dot"></span>
-        <span data-text="$lastUpdate">Loading...</span>
+    <div class="header-left">
+      <div>
+        <div class="logo">DoomTrade</div>
+        <div class="header-sub">Agent Trading Platform</div>
       </div>
     </div>
-    <div data-show="$mode === 'live'">
-      <span class="mode-badge mode-live">LIVE</span>
-    </div>
-    <div data-show="$mode !== 'live'">
-      <span class="mode-badge mode-sim">SIM</span>
-    </div>
-  </div>
-
-  <!-- Portfolio Summary -->
-  <div class="grid">
-    <div class="card">
-      <div class="card-label">Equity</div>
-      <div class="card-value" data-text="'$' + $equity"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Cash</div>
-      <div class="card-value" data-text="'$' + $cash"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Positions Value</div>
-      <div class="card-value" data-text="'$' + $positionsValue"></div>
-      <div class="card-sub" data-text="$positionCount + ' open'"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Total P&L</div>
-      <div class="card-value" data-text="'$' + $pnlTotal" data-class:positive="$pnlPct >= 0" data-class:negative="$pnlPct < 0"></div>
-      <div class="card-sub" data-text="($pnlPct + '%')" data-class:positive="$pnlPct >= 0" data-class:negative="$pnlPct < 0"></div>
-    </div>
-    <div class="card">
-      <div class="card-label">Exposure</div>
-      <div class="card-value" data-text="$exposure + '%'"></div>
+    <div class="header-right">
+      <span class="status-dot" id="status-dot"></span>
+      <span class="last-update" id="last-update">Connecting…</span>
+      <span class="mode-badge mode-sim" id="mode-badge">SIM</span>
     </div>
   </div>
 
-  <!-- Equity Chart -->
-  <div class="section">
-    <div class="section-title">Equity Curve</div>
-    <div class="card">
-      <canvas id="equity-chart"></canvas>
-    </div>
+  <!-- Toolbar -->
+  <div class="toolbar">
+    <button class="btn btn-primary" id="btn-a2a" onclick="runA2ACycle()">⚡ Run A2A Cycle</button>
+    <button class="btn" id="btn-eval-all" onclick="evaluateAllAgents()">▶ Evaluate All</button>
+    <button class="btn" onclick="fetchDashboard()">↻ Refresh</button>
+    <span style="flex:1"></span>
+    <span style="font-size:11px;color:var(--muted);align-self:center" id="health-info"></span>
   </div>
 
-  <!-- Open Positions -->
-  <div class="section">
-    <div class="section-title">Open Positions</div>
-    <div class="card">
-      <div id="positions-container">
-        <div class="empty">Loading...</div>
-      </div>
-    </div>
+  <!-- Agent Cards Grid -->
+  <div class="agents-grid" id="agents-grid">
+    <div style="color:var(--muted);padding:40px;text-align:center;grid-column:1/-1">Loading agents…</div>
   </div>
 
-  <!-- Recent Decisions -->
-  <div class="section">
-    <div class="section-title">Recent Decisions</div>
-    <div class="card">
-      <div id="decisions-container">
-        <div class="empty">Loading...</div>
-      </div>
-    </div>
-  </div>
+</div>
 
-  <!-- Recent Trades -->
-  <div class="section">
-    <div class="section-title">Recent Trades</div>
-    <div class="card">
-      <div id="trades-container">
-        <div class="empty">Loading...</div>
-      </div>
-    </div>
-  </div>
+<!-- Toast -->
+<div class="toast" id="toast"></div>
 
-  <!-- Experimental Themes -->
-  <div class="section">
-    <div class="section-title">Experimental Themes</div>
-    <div class="card">
-      <div id="themes-container">
-        <div class="empty">Loading...</div>
-      </div>
-    </div>
-  </div>
+<script>
+const API = '';
+let dashboardData = {};
+let expandedAgent = null;
 
-  <!-- Agent Leaderboard -->
-  <div class="section">
-    <div class="section-title">Agent Leaderboard</div>
-    <div class="card">
-      <div id="agents-container">
-        <div class="empty">Loading...</div>
-      </div>
-    </div>
-  </div>
+// ── XSS-safe escape ──────────────────────────────
+function esc(v) {
+  if (v == null) return '';
+  const d = document.createElement('div');
+  d.textContent = String(v);
+  return d.innerHTML;
+}
 
-  </div>
+// ── Toast ────────────────────────────────────────
+function toast(msg, type) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (type || '');
+  setTimeout(() => t.classList.remove('show'), 3000);
+}
 
-  <script type="module">
-    // Import Datastar's mergePatch for proper signal updates
-    import { mergePatch } from "https://cdn.jsdelivr.net/gh/starfederation/datastar@v1.0.3/bundles/datastar.js";
+// ── API helpers ──────────────────────────────────
+async function api(path, method) {
+  const resp = await fetch(API + path, { method: method || 'GET' });
+  return resp;
+}
 
-    // ── XSS-safe HTML escaping ──────────────────────────────────────
-    // All dynamic text from the API is passed through this before
-    // being inserted into innerHTML.  This prevents script injection
-    // via agent rationale, symbol names, or any other string field.
-    function esc(value) {
-      if (value == null) return '';
-      const div = document.createElement('div');
-      div.textContent = String(value);
-      return div.innerHTML;
-    }
+async function apiJSON(path) {
+  const resp = await fetch(API + path);
+  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
+  return resp.json();
+}
 
-    // ── Polling fetch + signal update ───────────────────────────────
-    async function fetchDashboard() {
-      const statusDot = document.getElementById('status-dot');
-      try {
-        const [portResp, posResp, decResp, tradeResp, histResp] = await Promise.all([
-          fetch('/api/portfolio'),
-          fetch('/api/positions'),
-          fetch('/api/decisions?limit=10'),
-          fetch('/api/trades?limit=10'),
-          fetch('/api/portfolio/history'),
-        ]);
+// ── Number formatting ────────────────────────────
+function fmtMoney(v) {
+  const n = Number(v || 0);
+  return '$' + n.toFixed(2);
+}
+function fmtPct(v) {
+  const n = Number(v || 0);
+  const sign = n >= 0 ? '+' : '';
+  return sign + n.toFixed(2) + '%';
+}
+function pnlClass(v) { return v >= 0 ? 'positive' : 'negative'; }
 
-        const port = await portResp.json();
-        const pos = await posResp.json();
-        const dec = await decResp.json();
-        const trades = await tradeResp.json();
-        const hist = await histResp.json();
+// ── Fetch all dashboard data ─────────────────────
+async function fetchDashboard() {
+  const dot = document.getElementById('status-dot');
+  try {
+    const [health, agentsResp, leaderResp] = await Promise.all([
+      apiJSON('/api/health'),
+      apiJSON('/api/agents'),
+      apiJSON('/api/agents/leaderboard'),
+    ]);
 
-        // Update scalar signals via Datastar's mergePatch API
-        // (replaces the broken setAttribute('data-signals:…') approach)
-        mergePatch({
-          mode: port.mode || 'sim',
-          equity: (port.portfolio?.equity || 0).toFixed(2),
-          cash: (port.portfolio?.cash || 0).toFixed(2),
-          positionsValue: (port.portfolio?.positionsValue || 0).toFixed(2),
-          pnlTotal: (port.pnl?.total || 0).toFixed(2),
-          pnlPct: (port.pnl?.totalPct || 0).toFixed(2),
-          exposure: (port.portfolio?.exposurePct || 0).toFixed(2),
-          positionCount: port.portfolio?.positionCount || 0,
-          lastUpdate: new Date().toLocaleTimeString(),
-        });
+    const agents = agentsResp.agents || [];
+    const leaderboard = leaderResp.leaderboard || [];
+    const rankMap = {};
+    leaderboard.forEach(e => rankMap[e.name] = e.rank);
 
-        // Render table sections via direct DOM manipulation (innerHTML
-        // with escaped content — NOT via Datastar data-text which only
-        // sets textContent and would show raw HTML as literal text)
-        document.getElementById('positions-container').innerHTML =
-          renderPositions(pos.positions || []);
-        document.getElementById('decisions-container').innerHTML =
-          renderDecisions(dec.decisions || []);
-        document.getElementById('trades-container').innerHTML =
-          renderTrades(trades.trades || []);
-
-        // Fetch themes
+    // Fetch per-agent details in parallel
+    const details = await Promise.all(
+      agents.map(async a => {
         try {
-          const themesResp = await fetch('/api/themes');
-          if (themesResp.ok) {
-            const themesData = await themesResp.json();
-            document.getElementById('themes-container').innerHTML =
-              renderThemes(themesData.themes || []);
-          } else {
-            document.getElementById('themes-container').innerHTML =
-              '<div class="empty">Themes not available</div>';
-          }
-        } catch {
-          document.getElementById('themes-container').innerHTML =
-            '<div class="empty">Themes not available</div>';
+          const [port, pos, trd, ana] = await Promise.all([
+            apiJSON(`/api/agents/${a.id}/portfolio`),
+            apiJSON(`/api/agents/${a.id}/positions`),
+            apiJSON(`/api/agents/${a.id}/trades?limit=5`),
+            apiJSON(`/api/agents/${a.id}/analytics`),
+          ]);
+          return { agent: a, portfolio: port, positions: pos, trades: trd, analytics: ana, rank: rankMap[a.name] || '-' };
+        } catch (e) {
+          return { agent: a, portfolio: null, positions: null, trades: null, analytics: null, rank: rankMap[a.name] || '-' };
         }
+      })
+    );
 
-        // Fetch agents leaderboard
-        try {
-          const agentsResp = await fetch('/api/agents');
-          const leaderboardResp = await fetch('/api/agents/leaderboard');
-          let agents = [];
-          let leaderboard = [];
-          if (agentsResp.ok) agents = (await agentsResp.json()).agents || [];
-          if (leaderboardResp.ok) leaderboard = (await leaderboardResp.json()).leaderboard || [];
-          document.getElementById('agents-container').innerHTML =
-            renderAgents(agents, leaderboard);
-        } catch {
-          document.getElementById('agents-container').innerHTML =
-            '<div class="empty">Agents not available</div>';
-        }
+    dashboardData = { health, agents: details, leaderboard };
+    renderDashboard();
+    dot.classList.remove('error');
+    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
+    document.getElementById('mode-badge').textContent = (health.mode || 'sim').toUpperCase();
+    document.getElementById('mode-badge').className = 'mode-badge ' + (health.mode === 'live' ? 'mode-live' : 'mode-sim');
+    document.getElementById('health-info').textContent = `uptime ${Math.round(health.uptime || 0)}s`;
+  } catch (e) {
+    console.error('Dashboard fetch error:', e);
+    dot.classList.add('error');
+    document.getElementById('last-update').textContent = 'Error: ' + e.message;
+  }
+}
 
-        // Draw equity chart on canvas
-        drawEquityChart(hist.history || []);
+// ── Render ───────────────────────────────────────
+function renderDashboard() {
+  const grid = document.getElementById('agents-grid');
+  const agents = dashboardData.agents || [];
+  if (!agents.length) {
+    grid.innerHTML = '<div style="color:var(--muted);padding:40px;text-align:center;grid-column:1/-1">No agents registered</div>';
+    return;
+  }
+  grid.innerHTML = agents.map(d => renderAgentCard(d)).join('');
+}
 
-        statusDot.classList.remove('dot-error');
-      } catch (e) {
-        console.error('Dashboard fetch error:', e);
-        mergePatch({ lastUpdate: 'Error: ' + e.message });
-        statusDot.classList.add('dot-error');
-      }
+function renderAgentCard(d) {
+  const a = d.agent;
+  const port = d.portfolio?.portfolio || {};
+  const p equity = port.equity || a.equity || a.cash || 0;
+  const cash = port.cash ?? a.cash ?? 0;
+  const initBal = a.initialBalance || a.starting_balance || 100;
+  const pnl = equity - initBal;
+  const retPct = ((pnl / initBal) * 100);
+  const positions = d.positions?.positions || [];
+  const trades = d.trades?.trades || [];
+  const analytics = d.analytics?.analytics || {};
+  const rank = d.rank;
+  const rankClass = rank <= 3 ? `rank-${rank}` : '';
+  const isActive = a.active;
+  const expanded = expandedAgent === a.id ? 'expanded' : '';
+
+  let html = `<div class="agent-card ${expanded}" id="card-${a.id}">`;
+
+  // Header row
+  html += `<div class="agent-header" onclick="toggleAgent('${a.id}')">`;
+  html += `<div class="agent-name-row">`;
+  html += `<div class="agent-rank ${rankClass}">${esc(rank)}</div>`;
+  html += `<div>`;
+  html += `<div class="agent-name">${esc(a.name)}</div>`;
+  html += `<div class="agent-strategy">${esc(a.strategy || '—')}</div>`;
+  html += `</div></div>`;
+  html += `<div class="agent-stats">`;
+  html += `<div class="agent-stat"><div class="agent-stat-label">Equity</div><div class="agent-stat-value">${fmtMoney(equity)}</div></div>`;
+  html += `<div class="agent-stat"><div class="agent-stat-label">P&L</div><div class="agent-pnl ${pnlClass(pnl)}">${pnl >= 0 ? '+' : ''}${fmtMoney(pnl)}</div></div>`;
+  html += `<div class="agent-stat"><div class="agent-stat-label">Return</div><div class="agent-pnl ${pnlClass(retPct)}">${fmtPct(retPct)}</div></div>`;
+  html += `</div></div>`;
+
+  // Expanded body
+  html += `<div class="agent-body">`;
+
+  // Metrics row
+  html += `<div class="agent-metrics">`;
+  html += `<div class="metric"><div class="metric-label">Cash</div><div class="metric-value">${fmtMoney(cash)}</div></div>`;
+  html += `<div class="metric"><div class="metric-label">Positions</div><div class="metric-value">${positions.length}</div></div>`;
+  html += `<div class="metric"><div class="metric-label">Win Rate</div><div class="metric-value">${(analytics.winRate || 0).toFixed(0)}%</div></div>`;
+  html += `<div class="metric"><div class="metric-label">Max DD</div><div class="metric-value">${(analytics.maxDrawdownPct || 0).toFixed(2)}%</div></div>`;
+  html += `</div>`;
+
+  // Positions table
+  html += `<div class="sub-section-title">Positions</div>`;
+  if (positions.length) {
+    html += `<table class="mini-table"><tr><th>Symbol</th><th>Qty</th><th>Entry</th><th>Current</th><th>P&L</th></tr>`;
+    positions.forEach(p => {
+      const upnl = p.unrealizedPnl || 0;
+      html += `<tr><td><strong>${esc(p.symbol)}</strong></td><td>${p.quantity.toFixed(6)}</td><td>$${Number(p.avgEntryPrice||0).toFixed(2)}</td><td>$${Number(p.currentPrice||p.avgEntryPrice||0).toFixed(2)}</td><td class="${pnlClass(upnl)}">${upnl>=0?'+':''}$${upnl.toFixed(2)}</td></tr>`;
+    });
+    html += `</table>`;
+  } else {
+    html += `<div style="color:var(--dim);font-size:11px;padding:8px 0">No open positions</div>`;
+  }
+
+  // Recent trades
+  html += `<div class="sub-section-title">Recent Trades</div>`;
+  if (trades.length) {
+    html += `<table class="mini-table"><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill</th><th>Fee</th></tr>`;
+    trades.forEach(t => {
+      const time = new Date(t.created_at || t.filled_at || Date.now()).toLocaleTimeString();
+      const sideClass = t.side === 'buy' ? 'positive' : 'negative';
+      html += `<tr><td>${esc(time)}</td><td><strong>${esc(t.symbol)}</strong></td><td class="${sideClass}">${esc(t.side).toUpperCase()}</td><td>${Number(t.quantity||0).toFixed(6)}</td><td>$${Number(t.fill_price||0).toFixed(2)}</td><td>$${Number(t.fee||0).toFixed(2)}</td></tr>`;
+    });
+    html += `</table>`;
+  } else {
+    html += `<div style="color:var(--dim);font-size:11px;padding:8px 0">No trades yet</div>`;
+  }
+
+  // Action bar
+  html += `<div class="agent-actions">`;
+  html += `<button class="btn-sm" onclick="evaluateAgent('${a.id}','${esc(a.name)}')" id="btn-eval-${a.id}">▶ Evaluate</button>`;
+  html += `<span style="flex:1"></span>`;
+  html += `<span style="font-size:10px;color:var(--dim);align-self:center;${isActive?'':'opacity:0.5'}">${isActive?'● Active':'● Inactive'}</span>`;
+  html += `</div>`;
+
+  html += `</div></div>`;
+  return html;
+}
+
+// ── Interactions ─────────────────────────────────
+function toggleAgent(id) {
+  expandedAgent = expandedAgent === id ? null : id;
+  renderDashboard();
+}
+
+async function evaluateAgent(id, name) {
+  const btn = document.getElementById('btn-eval-' + id);
+  if (btn) { btn.disabled = true; btn.textContent = 'Evaluating…'; }
+  try {
+    const resp = await fetch(`/api/agents/${id}/evaluate`, { method: 'POST' });
+    const data = await resp.json();
+    if (resp.ok) {
+      toast(`${name}: ${data.signals} signals, ${data.trades} trades, P&L ${fmtMoney(data.pnlChange)}`, 'success');
+      await fetchDashboard();
+      expandedAgent = id;
+      renderDashboard();
+    } else {
+      toast(`${name}: ${data.error || 'Evaluation failed'}`, 'error');
     }
+  } catch (e) {
+    toast(`${name}: ${e.message}`, 'error');
+  }
+  if (btn) { btn.disabled = false; btn.textContent = '▶ Evaluate'; }
+}
 
-    // ── Table renderers (all dynamic values escaped via esc()) ──────
+async function evaluateAllAgents() {
+  const btn = document.getElementById('btn-eval-all');
+  btn.classList.add('btn-loading');
+  const agents = dashboardData.agents || [];
+  for (const d of agents) {
+    if (d.agent.active) await evaluateAgent(d.agent.id, d.agent.name);
+  }
+  btn.classList.remove('btn-loading');
+}
 
-    function renderPositions(positions) {
-      if (!positions.length) return '<div class="empty">No open positions</div>';
-      let html = '<table><tr><th>Symbol</th><th>Side</th><th>Qty</th><th>Entry</th><th>Current</th><th>P&amp;L</th></tr>';
-      for (const p of positions) {
-        const pnl = p.unrealizedPnl || 0;
-        const pnlClass = pnl >= 0 ? 'positive' : 'negative';
-        const pnlSign = pnl >= 0 ? '+' : '';
-        html += '<tr>'
-          + '<td><strong>' + esc(p.symbol) + '</strong></td>'
-          + '<td>' + esc(p.side) + '</td>'
-          + '<td>' + esc(p.quantity) + '</td>'
-          + '<td>$' + Number(p.avgEntryPrice || 0).toFixed(2) + '</td>'
-          + '<td>$' + Number(p.currentPrice || p.avgEntryPrice || 0).toFixed(2) + '</td>'
-          + '<td class="' + pnlClass + '">' + pnlSign + '$' + pnl.toFixed(2) + '</td>'
-          + '</tr>';
-      }
-      html += '</table>';
-      return html;
+async function runA2ACycle() {
+  const btn = document.getElementById('btn-a2a');
+  btn.classList.add('btn-loading');
+  btn.textContent = '⚡ Running A2A Cycle…';
+  try {
+    const resp = await fetch('/api/agents/a2a-cycle', { method: 'POST' });
+    const data = await resp.json();
+    if (resp.ok) {
+      const errs = data.errors?.length || 0;
+      toast(`A2A Cycle complete: ${data.signals?.length||0} signals, ${data.validations?.length||0} validations, ${errs} errors`, errs ? 'error' : 'success');
+      await fetchDashboard();
+    } else {
+      toast(`A2A Cycle failed: ${data.error}`, 'error');
     }
+  } catch (e) {
+    toast(`A2A Cycle error: ${e.message}`, 'error');
+  }
+  btn.classList.remove('btn-loading');
+  btn.textContent = '⚡ Run A2A Cycle';
+}
 
-    function renderDecisions(decisions) {
-      if (!decisions.length) return '<div class="empty">No decisions yet</div>';
-      let html = '<table><tr><th>Time</th><th>Agent</th><th>Action</th><th>Symbol</th><th>Qty</th><th>Price</th><th>Conf</th><th>Rationale</th></tr>';
-      for (const d of decisions) {
-        const time = new Date(d.timestamp).toLocaleTimeString();
-        const conf = d.confidence || 0;
-        const confClass = conf >= 7 ? 'conf-high' : conf >= 4 ? 'conf-med' : 'conf-low';
-        html += '<tr>'
-          + '<td>' + esc(time) + '</td>'
-          + '<td class="agent-tag">' + esc(d.agent) + '</td>'
-          + '<td><strong>' + esc(d.action).toUpperCase() + '</strong></td>'
-          + '<td>' + esc(d.symbol) + '</td>'
-          + '<td>' + esc(d.quantity) + '</td>'
-          + '<td>$' + Number(d.priceAtDecision || 0).toFixed(2) + '</td>'
-          + '<td><span class="confidence ' + confClass + '">' + conf + '/10</span></td>'
-          + '<td class="rationale">' + esc(d.rationale) + '</td>'
-          + '</tr>';
-      }
-      html += '</table>';
-      return html;
-    }
-
-    function renderTrades(trades) {
-      if (!trades.length) return '<div class="empty">No trades yet</div>';
-      let html = '<table><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill</th><th>Fee</th><th>Status</th></tr>';
-      for (const t of trades) {
-        const time = new Date(t.timestamp).toLocaleTimeString();
-        const statusClass = 'status-' + (t.status || 'pending');
-        html += '<tr>'
-          + '<td>' + esc(time) + '</td>'
-          + '<td><strong>' + esc(t.symbol) + '</strong></td>'
-          + '<td>' + esc(t.side).toUpperCase() + '</td>'
-          + '<td>' + esc(t.quantity) + '</td>'
-          + '<td>$' + Number(t.fillPrice || 0).toFixed(2) + '</td>'
-          + '<td>$' + Number(t.fee || 0).toFixed(2) + '</td>'
-          + '<td class="' + esc(statusClass) + '">' + esc(t.status) + '</td>'
-          + '</tr>';
-      }
-      html += '</table>';
-      return html;
-    }
-
-    function renderThemes(themes) {
-      if (!themes.length) return '<div class="empty">No themes configured</div>';
-      let html = '<table><tr><th>Name</th><th>Strategy</th><th>Mode</th><th>Capital</th><th>Status</th><th>Schedule</th></tr>';
-      for (const t of themes) {
-        const statusClass = t.enabled ? 'status-filled' : 'status-pending';
-        const status = t.enabled ? 'active' : 'disabled';
-        const schedule = t.schedule.type === 'cron' ? 'cron: ' + esc(t.schedule.expression || '')
-          : t.schedule.type === 'interval' ? (t.schedule.milliseconds / 1000) + 's'
-          : 'manual';
-        html += '<tr>'
-          + '<td><strong>' + esc(t.name) + '</strong></td>'
-          + '<td>' + esc(t.strategy) + '</td>'
-          + '<td>' + esc(t.mode).toUpperCase() + '</td>'
-          + '<td>$' + Number(t.allocatedCapital || 0).toFixed(2) + '</td>'
-          + '<td class="' + statusClass + '">' + status + '</td>'
-          + '<td>' + schedule + '</td>'
-          + '</tr>';
-      }
-      html += '</table>';
-      return html;
-    }
-
-    function renderAgents(agents, leaderboard) {
-      if (!agents.length && !leaderboard.length) return '<div class="empty">No agents registered</div>';
-      const rankMap = {};
-      for (const e of leaderboard) rankMap[e.name] = e.rank;
-      let html = '<table><tr><th>#</th><th>Agent</th><th>Strategy</th><th>Equity</th><th>Cash</th><th>P&amp;L</th><th>Return %</th><th>Status</th></tr>';
-      for (const a of agents) {
-        const rank = rankMap[a.name] || '-';
-        const equity = Number(a.equity || a.cash || 0);
-        const cash = Number(a.cash || 0);
-        const pnl = equity - (a.initial_cash || a.starting_balance || 100);
-        const retPct = ((pnl / (a.initial_cash || a.starting_balance || 100)) * 100);
-        const pnlClass = pnl >= 0 ? 'positive' : 'negative';
-        const pnlSign = pnl >= 0 ? '+' : '';
-        const statusClass = a.active ? 'status-filled' : 'status-pending';
-        const status = a.active ? 'active' : 'inactive';
-        html += '<tr>'
-          + '<td><strong>' + esc(rank) + '</strong></td>'
-          + '<td><strong>' + esc(a.name) + '</strong></td>'
-          + '<td>' + esc(a.strategy || '—') + '</td>'
-          + '<td>$' + equity.toFixed(2) + '</td>'
-          + '<td>$' + cash.toFixed(2) + '</td>'
-          + '<td class="' + pnlClass + '">' + pnlSign + '$' + pnl.toFixed(2) + '</td>'
-          + '<td class="' + pnlClass + '">' + pnlSign + retPct.toFixed(2) + '%</td>'
-          + '<td class="' + statusClass + '">' + status + '</td>'
-          + '</tr>';
-      }
-      html += '</table>';
-      return html;
-    }
-
-    function drawEquityChart(points) {
-      if (!points || points.length < 2) return;
-      const canvas = document.getElementById('equity-chart');
-      const ctx = canvas.getContext('2d');
-      const w = canvas.width = canvas.offsetWidth;
-      const h = canvas.height = 200;
-
-      const values = points.map(p => p.equity || p.value || 0);
-      const min = Math.min(...values);
-      const max = Math.max(...values);
-      const range = max - min || 1;
-
-      ctx.clearRect(0, 0, w, h);
-      ctx.strokeStyle = '#30363d';
-      ctx.lineWidth = 1;
-      // Grid lines
-      for (let i = 0; i <= 4; i++) {
-        const y = (h / 4) * i;
-        ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
-        ctx.stroke();
-      }
-
-      // Equity line
-      ctx.strokeStyle = '#58a6ff';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      for (let i = 0; i < values.length; i++) {
-        const x = (w / (values.length - 1)) * i;
-        const y = h - ((values[i] - min) / range) * (h - 20) - 10;
-        if (i === 0) ctx.moveTo(x, y);
-        else ctx.lineTo(x, y);
-      }
-      ctx.stroke();
-
-      // Fill under line
-      ctx.lineTo(w, h);
-      ctx.lineTo(0, h);
-      ctx.closePath();
-      ctx.fillStyle = 'rgba(88, 166, 255, 0.1)';
-      ctx.fill();
-
-      // Labels
-      ctx.fillStyle = '#8b949e';
-      ctx.font = '11px sans-serif';
-      ctx.fillText('$' + max.toFixed(0), 4, 14);
-      ctx.fillText('$' + min.toFixed(0), 4, h - 4);
-    }
-
-    // Initial fetch + poll
-    fetchDashboard();
-    setInterval(fetchDashboard, 5000);
-  </script>
+// ── Init ─────────────────────────────────────────
+fetchDashboard();
+setInterval(fetchDashboard, 10000);
+</script>
 </body>
+</html>
