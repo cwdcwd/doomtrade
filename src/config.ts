@@ -33,6 +33,9 @@ const ConfigSchema = z.object({
   simStartingBalance: z.number().positive().default(100_000),
   simFeePct: z.number().nonnegative().default(0.1),
 
+  // Redis (for BullMQ theme scheduling)
+  redisUrl: z.string().default(""),
+
   // API security
   apiKey: z.string().default(""),
 });
@@ -61,6 +64,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     maxDrawdownPct: env.MAX_DRAWDOWN_PCT ? parseFloat(env.MAX_DRAWDOWN_PCT) : undefined,
     simStartingBalance: env.SIM_STARTING_BALANCE ? parseFloat(env.SIM_STARTING_BALANCE) : undefined,
     simFeePct: env.SIM_FEE_PCT ? parseFloat(env.SIM_FEE_PCT) : undefined,
+    redisUrl: env.REDIS_URL,
     apiKey: env.DOOMTRADE_API_KEY,
   });
 }

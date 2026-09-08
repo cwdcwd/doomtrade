@@ -29,6 +29,7 @@ import type { Portfolio } from "../portfolio/portfolio.js";
 import type { Config } from "../config.js";
 import type { MarketDataService } from "../market/market.js";
 import type { ResearchService } from "../research/research.js";
+import type { ThemeRunner } from "../themes/theme-runner.js";
 import {
   CreateDecisionBodySchema,
   ListDecisionsQuerySchema,
@@ -36,6 +37,9 @@ import {
   PortfolioHistoryQuerySchema,
   ToggleModeBodySchema,
   ListTradesQuerySchema,
+  CreateThemeBodySchema,
+  UpdateThemeBodySchema,
+  ListThemesQuerySchema,
 } from "./schemas.js";
 import { z } from "zod";
 
@@ -54,6 +58,8 @@ export interface AppState {
   marketData?: MarketDataService;
   /** Research service for technical analysis */
   research?: ResearchService;
+  /** Theme runner for experimental strategies */
+  themeRunner?: ThemeRunner;
 }
 
 // ── Mode toggle cooldown (seconds) ──────────────────────────────
@@ -440,6 +446,153 @@ export function createApiRouter(state: AppState): Router {
       res.json({ mode: state.currentMode, snapshots, count: snapshots.length });
     } catch (err) {
       res.status(502).json({ error: "Failed to fetch snapshots", message: (err as Error).message, mode: state.currentMode });
+    }
+  });
+
+  // ── Themes ────────────────────────────────────────────────────
+
+  router.get("/themes", async (req: Request, res: Response) => {
+    if (!state.themeRunner) {
+      res.status(503).json({ error: "Theme runner not available" });
+      return;
+    }
+    const parsed = ListThemesQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+      return;
+    }
+
+    const { ThemeStore } = await import("../themes/theme-store.js");
+    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const themes = await store.list({
+      strategy: parsed.data.strategy,
+      enabled: parsed.data.enabled !== undefined ? parsed.data.enabled === "true" : undefined,
+    });
+    res.json({ mode: state.currentMode, themes, count: themes.length });
+  });
+
+  router.post("/themes", async (req: Request, res: Response) => {
+    if (!state.themeRunner) {
+      res.status(503).json({ error: "Theme runner not available" });
+      return;
+    }
+    const parsed = CreateThemeBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+      return;
+    }
+
+    const { ThemeStore } = await import("../themes/theme-store.js");
+    const store = new ThemeStore(state.decisionStore["db"] as any);
+    try {
+      const input = {
+        ...parsed.data,
+        schedule: parsed.data.schedule as any,
+      };
+      const theme = await store.create(input);
+      if (theme.enabled && theme.schedule.type !== "manual") {
+        await state.themeRunner.start(theme.id);
+      }
+      res.status(201).json({ mode: state.currentMode, theme });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to create theme", message: (err as Error).message });
+    }
+  });
+
+  router.get("/themes/:id", async (req: Request, res: Response) => {
+    if (!state.themeRunner) {
+      res.status(503).json({ error: "Theme runner not available" });
+      return;
+    }
+    const { ThemeStore } = await import("../themes/theme-store.js");
+    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const theme = await store.getById(String(req.params.id));
+    if (!theme) {
+      res.status(404).json({ error: "Theme not found", id: req.params.id });
+      return;
+    }
+    res.json({ mode: state.currentMode, theme });
+  });
+
+  router.patch("/themes/:id", async (req: Request, res: Response) => {
+    if (!state.themeRunner) {
+      res.status(503).json({ error: "Theme runner not available" });
+      return;
+    }
+    const parsed = UpdateThemeBodySchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+      return;
+    }
+
+    const { ThemeStore } = await import("../themes/theme-store.js");
+    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const theme = await store.update(String(req.params.id), {
+      ...parsed.data,
+      schedule: parsed.data.schedule as any,
+    });
+    if (!theme) {
+      res.status(404).json({ error: "Theme not found", id: req.params.id });
+      return;
+    }
+    res.json({ mode: state.currentMode, theme });
+  });
+
+  router.delete("/themes/:id", async (req: Request, res: Response) => {
+    if (!state.themeRunner) {
+      res.status(503).json({ error: "Theme runner not available" });
+      return;
+    }
+    const id = String(req.params.id);
+    await state.themeRunner.stop(id);
+
+    const { ThemeStore } = await import("../themes/theme-store.js");
+    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const deleted = await store.delete(id);
+    if (!deleted) {
+      res.status(404).json({ error: "Theme not found", id });
+      return;
+    }
+    res.json({ mode: state.currentMode, deleted: true, id });
+  });
+
+  router.post("/themes/:id/evaluate", async (req: Request, res: Response) => {
+    if (!state.themeRunner) {
+      res.status(503).json({ error: "Theme runner not available" });
+      return;
+    }
+    try {
+      const result = await state.themeRunner.evaluateOnce(String(req.params.id));
+      res.json({ mode: state.currentMode, result });
+    } catch (err) {
+      const status = (err as Error).message.includes("not found") ? 404 : 500;
+      res.status(status).json({ error: (err as Error).message });
+    }
+  });
+
+  router.get("/themes/:id/evaluations", async (req: Request, res: Response) => {
+    if (!state.themeRunner) {
+      res.status(503).json({ error: "Theme runner not available" });
+      return;
+    }
+    const { ThemeStore } = await import("../themes/theme-store.js");
+    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const limit = parseInt(String(req.query.limit ?? "50"), 10);
+    const evaluations = await store.listEvaluations(String(req.params.id), limit);
+    res.json({ mode: state.currentMode, evaluations, count: evaluations.length });
+  });
+
+  router.get("/themes/:id/performance", async (req: Request, res: Response) => {
+    if (!state.themeRunner) {
+      res.status(503).json({ error: "Theme runner not available" });
+      return;
+    }
+    try {
+      const performance = await state.themeRunner.getPerformance(String(req.params.id));
+      res.json({ mode: state.currentMode, performance });
+    } catch (err) {
+      const status = (err as Error).message.includes("not found") ? 404 : 500;
+      res.status(status).json({ error: (err as Error).message });
     }
   });
 

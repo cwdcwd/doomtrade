@@ -81,3 +81,53 @@ export const ListTradesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 export type ListTradesQuery = z.infer<typeof ListTradesQuerySchema>;
+
+// ── Theme endpoints ─────────────────────────────────────────────
+
+export const CreateThemeBodySchema = z.object({
+  name: z.string().min(1).max(200),
+  strategy: z.string().min(1),
+  mode: z.enum(["sim", "live"]).default("sim"),
+  schedule: z.object({
+    type: z.enum(["cron", "interval", "manual"]),
+    expression: z.string().optional(),
+    milliseconds: z.number().int().positive().optional(),
+  }).refine(
+    (data) => {
+      if (data.type === "cron") return !!data.expression;
+      if (data.type === "interval") return !!data.milliseconds;
+      return true;
+    },
+    { message: "cron requires expression, interval requires milliseconds" }
+  ),
+  maxAllocationPct: z.number().positive().max(100).default(5),
+  maxTotalAllocationPct: z.number().positive().max(100).default(40),
+  maxPositions: z.number().int().positive().default(10),
+  allocatedCapital: z.number().nonnegative().default(0),
+  params: z.record(z.string(), z.unknown()).default({}),
+  enabled: z.boolean().default(true),
+});
+export type CreateThemeBody = z.infer<typeof CreateThemeBodySchema>;
+
+export const UpdateThemeBodySchema = z.object({
+  name: z.string().min(1).max(200).optional(),
+  mode: z.enum(["sim", "live"]).optional(),
+  schedule: z.object({
+    type: z.enum(["cron", "interval", "manual"]),
+    expression: z.string().optional(),
+    milliseconds: z.number().int().positive().optional(),
+  }).optional(),
+  maxAllocationPct: z.number().positive().max(100).optional(),
+  maxTotalAllocationPct: z.number().positive().max(100).optional(),
+  maxPositions: z.number().int().positive().optional(),
+  allocatedCapital: z.number().nonnegative().optional(),
+  params: z.record(z.string(), z.unknown()).optional(),
+  enabled: z.boolean().optional(),
+});
+export type UpdateThemeBody = z.infer<typeof UpdateThemeBodySchema>;
+
+export const ListThemesQuerySchema = z.object({
+  strategy: z.string().optional(),
+  enabled: z.enum(["true", "false"]).optional(),
+});
+export type ListThemesQuery = z.infer<typeof ListThemesQuerySchema>;
