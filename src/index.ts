@@ -155,11 +155,9 @@ async function main() {
     authMiddleware(req, res, next);
   });
 
-  // Serve dashboard static files
-  app.use(express.static("public"));
-
   // Dashboard route — injects API key into the page so the dashboard's
-  // fetch calls authenticate when DOOMTRADE_API_KEY is set
+  // fetch calls authenticate when DOOMTRADE_API_KEY is set.
+  // This MUST come before express.static so we intercept the root path.
   app.get("/", (req, res) => {
     const fs = require("fs");
     const path = require("path");
@@ -199,6 +197,9 @@ async function main() {
     }
     res.send(html);
   });
+
+  // Serve dashboard static files (for any other static assets)
+  app.use(express.static("public"));
 
   // Health check — used by Railway for deployment healthchecks
   app.get("/health", (_req, res) => {
