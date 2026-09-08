@@ -21,6 +21,7 @@ import type { ThemeConfig, ThemeEvaluationResult, ThemeSignal } from "../theme.j
 import { CongressTradesSignalSource } from "../sources/congress-trades.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
 import { ThemeStore } from "../theme-store.js";
+import { isWithinAllocationLimit } from "../allocation-check.js";
 
 interface CongressFollowerParams {
   politician: string;
@@ -137,8 +138,7 @@ export class CongressFollowerStrategy implements ThemeStrategy {
         continue;
       }
 
-      const maxQty = Math.floor(maxAllocation / price);
-      const qty = Math.min(maxQty, Math.floor(maxAllocation / price));
+      const qty = Math.floor(maxAllocation / price);
       if (qty <= 0) {
         errors.push(`Insufficient allocation for ${signal.symbol} at $${price}`);
         continue;
@@ -150,6 +150,18 @@ export class CongressFollowerStrategy implements ThemeStrategy {
       if (!hasPosition && positions.length >= config.maxPositions) {
         errors.push(`Max positions reached — skipping ${signal.symbol}`);
         continue;
+      }
+
+      // Enforce maxTotalAllocationPct (fixes #37)
+      if (signal.action === "buy") {
+        const buyValue = qty * price;
+        const check = isWithinAllocationLimit(
+          positions, equity, config.maxTotalAllocationPct, config.maxAllocationPct, buyValue,
+        );
+        if (!check.allowed) {
+          errors.push(`Allocation limit for ${signal.symbol}: ${check.reason}`);
+          continue;
+        }
       }
 
       // Record signal for dedup (fixes #34 — uses ThemeStore with convertPlaceholders)

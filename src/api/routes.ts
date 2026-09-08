@@ -37,6 +37,7 @@ import {
   PortfolioHistoryQuerySchema,
   ToggleModeBodySchema,
   ListTradesQuerySchema,
+  TradeAnalyticsQuerySchema,
   CreateThemeBodySchema,
   UpdateThemeBodySchema,
   ListThemesQuerySchema,
@@ -60,6 +61,8 @@ export interface AppState {
   research?: ResearchService;
   /** Theme runner for experimental strategies */
   themeRunner?: ThemeRunner;
+  /** Database instance for direct access (theme store, etc.) */
+  db: import("../db/database.js").Database;
 }
 
 // ── Mode toggle cooldown (seconds) ──────────────────────────────
@@ -183,11 +186,13 @@ export function createApiRouter(state: AppState): Router {
       return;
     }
 
-    const { symbol, status, decisionId, limit, offset } = parsed.data;
+    const { symbol, status, decisionId, startDate, endDate, limit, offset } = parsed.data;
     const trades = await state.tradeEngine.listTrades({
       symbol,
       status,
       decisionId,
+      startDate,
+      endDate,
       limit,
       offset,
     });
@@ -197,6 +202,137 @@ export function createApiRouter(state: AppState): Router {
       trades,
       count: trades.length,
     });
+  });
+
+  // ── Trade analytics ────────────────────────────────────────────
+
+  router.get("/trades/analytics", async (req: Request, res: Response) => {
+    const parsed = TradeAnalyticsQuerySchema.safeParse(req.query);
+    if (!parsed.success) {
+      res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
+      return;
+    }
+
+    const { symbol, startDate, endDate } = parsed.data;
+
+    const conditions: string[] = ["status = 'filled'"];
+    const params: (string | number)[] = [];
+
+    if (symbol) {
+      conditions.push("symbol = ?");
+      params.push(symbol);
+    }
+    if (startDate) {
+      conditions.push("timestamp >= ?");
+      params.push(startDate);
+    }
+    if (endDate) {
+      conditions.push("timestamp <= ?");
+      params.push(endDate);
+    }
+
+    const where = conditions.join(" AND ");
+
+    const db = state.db;
+    if (!db) {
+      res.status(503).json({ error: "Database not available" });
+      return;
+    }
+
+    const { execGet, execAll, convertPlaceholders } = await import("../db/database.js");
+
+    try {
+      // Aggregate stats from filled trades
+      const agg = await execGet<{
+        total: number;
+        wins: number;
+        losses: number;
+        total_pnl: number;
+        avg_pnl: number;
+      }>(
+        db,
+        convertPlaceholders(
+          `SELECT
+             COUNT(*) as total,
+             COUNT(CASE WHEN realized_pnl > 0 THEN 1 END) as wins,
+             COUNT(CASE WHEN realized_pnl < 0 THEN 1 END) as losses,
+             COALESCE(SUM(realized_pnl), 0) as total_pnl,
+             COALESCE(AVG(realized_pnl), 0) as avg_pnl
+           FROM trades WHERE ${where}`,
+          db.backend,
+        ),
+        params,
+      );
+
+      const total = agg?.total ?? 0;
+      const wins = agg?.wins ?? 0;
+      const losses = agg?.losses ?? 0;
+      const totalPnl = agg?.total_pnl ?? 0;
+      const avgPnl = agg?.avg_pnl ?? 0;
+      const winRate = total > 0 ? wins / total : 0;
+
+      // Per-trade returns for Sharpe ratio calculation
+      const tradeRows = await execAll<{ realized_pnl: number }>(
+        db,
+        convertPlaceholders(
+          `SELECT realized_pnl FROM trades WHERE ${where} ORDER BY timestamp ASC`,
+          db.backend,
+        ),
+        params,
+      );
+
+      const returns = tradeRows.map((r) => r.realized_pnl);
+      const avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
+      const variance = returns.length > 0
+        ? returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length
+        : 0;
+      const stdDev = Math.sqrt(variance);
+      // Annualized Sharpe ratio (assuming daily trades, 252 trading days)
+      const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev) * Math.sqrt(252) : 0;
+
+      // Max drawdown from portfolio history (equity curve)
+      const equityRows = await execAll<{ timestamp: string; equity: number }>(
+        db,
+        convertPlaceholders(
+          `SELECT timestamp, equity FROM portfolio_history
+           WHERE 1=1
+             ${startDate ? " AND timestamp >= ?" : ""}
+             ${endDate ? " AND timestamp <= ?" : ""}
+           ORDER BY timestamp ASC`,
+          db.backend,
+        ),
+        [
+          ...(startDate ? [startDate] : []),
+          ...(endDate ? [endDate] : []),
+        ],
+      );
+
+      let maxDrawdown = 0;
+      let peakEquity = 0;
+      for (const row of equityRows) {
+        peakEquity = Math.max(peakEquity, row.equity);
+        if (peakEquity > 0) {
+          const drawdown = ((peakEquity - row.equity) / peakEquity) * 100;
+          maxDrawdown = Math.max(maxDrawdown, drawdown);
+        }
+      }
+
+      res.json({
+        mode: state.currentMode,
+        analytics: {
+          totalTrades: total,
+          wins,
+          losses,
+          winRate,
+          avgReturn,
+          totalPnl,
+          sharpeRatio,
+          maxDrawdownPct: maxDrawdown,
+        },
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to compute analytics", message: (err as Error).message });
+    }
   });
 
   router.get("/trades/:id", async (req: Request, res: Response) => {
@@ -430,25 +566,6 @@ export function createApiRouter(state: AppState): Router {
     }
   });
 
-  router.get("/market/snapshot", async (req: Request, res: Response) => {
-    if (!state.marketData) {
-      res.status(503).json({ error: "Market data service unavailable", mode: state.currentMode });
-      return;
-    }
-    try {
-      const symbolsParam = req.query.symbols as string;
-      if (!symbolsParam) {
-        res.status(400).json({ error: "Missing 'symbols' query parameter", mode: state.currentMode });
-        return;
-      }
-      const symbols = symbolsParam.split(",").map((s) => s.trim());
-      const snapshots = await state.marketData.getSnapshot(symbols);
-      res.json({ mode: state.currentMode, snapshots, count: snapshots.length });
-    } catch (err) {
-      res.status(502).json({ error: "Failed to fetch snapshots", message: (err as Error).message, mode: state.currentMode });
-    }
-  });
-
   // ── Themes ────────────────────────────────────────────────────
 
   router.get("/themes", async (req: Request, res: Response) => {
@@ -463,7 +580,7 @@ export function createApiRouter(state: AppState): Router {
     }
 
     const { ThemeStore } = await import("../themes/theme-store.js");
-    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const store = new ThemeStore(state.db);
     const themes = await store.list({
       strategy: parsed.data.strategy,
       enabled: parsed.data.enabled !== undefined ? parsed.data.enabled === "true" : undefined,
@@ -483,7 +600,7 @@ export function createApiRouter(state: AppState): Router {
     }
 
     const { ThemeStore } = await import("../themes/theme-store.js");
-    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const store = new ThemeStore(state.db);
     try {
       const input = {
         ...parsed.data,
@@ -505,7 +622,7 @@ export function createApiRouter(state: AppState): Router {
       return;
     }
     const { ThemeStore } = await import("../themes/theme-store.js");
-    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const store = new ThemeStore(state.db);
     const theme = await store.getById(String(req.params.id));
     if (!theme) {
       res.status(404).json({ error: "Theme not found", id: req.params.id });
@@ -526,7 +643,7 @@ export function createApiRouter(state: AppState): Router {
     }
 
     const { ThemeStore } = await import("../themes/theme-store.js");
-    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const store = new ThemeStore(state.db);
     const theme = await store.update(String(req.params.id), {
       ...parsed.data,
       schedule: parsed.data.schedule as any,
@@ -547,7 +664,7 @@ export function createApiRouter(state: AppState): Router {
     await state.themeRunner.stop(id);
 
     const { ThemeStore } = await import("../themes/theme-store.js");
-    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const store = new ThemeStore(state.db);
     const deleted = await store.delete(id);
     if (!deleted) {
       res.status(404).json({ error: "Theme not found", id });
@@ -576,7 +693,7 @@ export function createApiRouter(state: AppState): Router {
       return;
     }
     const { ThemeStore } = await import("../themes/theme-store.js");
-    const store = new ThemeStore(state.decisionStore["db"] as any);
+    const store = new ThemeStore(state.db);
     const limit = parseInt(String(req.query.limit ?? "50"), 10);
     const evaluations = await store.listEvaluations(String(req.params.id), limit);
     res.json({ mode: state.currentMode, evaluations, count: evaluations.length });

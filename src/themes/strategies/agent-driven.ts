@@ -23,6 +23,7 @@ import type { ThemeConfig, ThemeEvaluationResult, ThemeSignal } from "../theme.j
 import { AgentSignalSource } from "../sources/agent-signal.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
 import { ThemeStore } from "../theme-store.js";
+import { isWithinAllocationLimit } from "../allocation-check.js";
 
 interface AgentDrivenParams {
   agentEndpoint: string;
@@ -146,6 +147,16 @@ export class AgentDrivenStrategy implements ThemeStrategy {
         const hasPosition = positions.some((p) => p.symbol === signal.symbol);
         if (!hasPosition && positions.length >= config.maxPositions) {
           errors.push(`Max positions reached — skipping ${signal.symbol}`);
+          continue;
+        }
+
+        // Enforce maxTotalAllocationPct (fixes #37)
+        const buyValue = qty * price;
+        const allocCheck = isWithinAllocationLimit(
+          positions, equity, config.maxTotalAllocationPct, config.maxAllocationPct, buyValue,
+        );
+        if (!allocCheck.allowed) {
+          errors.push(`Allocation limit for ${signal.symbol}: ${allocCheck.reason}`);
           continue;
         }
       }

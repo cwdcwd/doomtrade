@@ -430,6 +430,8 @@ export class TradeEngine {
     symbol?: string;
     status?: TradeRecord["status"];
     decisionId?: string;
+    startDate?: string;
+    endDate?: string;
     limit?: number;
     offset?: number;
   }): Promise<TradeRecord[]> {
@@ -447,6 +449,14 @@ export class TradeEngine {
     if (filter?.decisionId) {
       conditions.push("decision_id = ?");
       params.push(filter.decisionId);
+    }
+    if (filter?.startDate) {
+      conditions.push("timestamp >= ?");
+      params.push(filter.startDate);
+    }
+    if (filter?.endDate) {
+      conditions.push("timestamp <= ?");
+      params.push(filter.endDate);
     }
 
     const limit = filter?.limit ?? 100;

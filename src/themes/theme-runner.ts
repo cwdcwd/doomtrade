@@ -97,6 +97,14 @@ export class ThemeRunner {
     const themes = await this.store.listEnabled();
     for (const config of themes) {
       try {
+        // Initialize sub-account if capital is allocated (fixes #41)
+        if (config.allocatedCapital > 0) {
+          const subAccount = new ThemeSubAccount(this.db, config.id, {
+            feeRate: this.opts.simFeeRate,
+            getCurrentPrice: this.opts.getCurrentPrice,
+          });
+          await subAccount.initialize(config.allocatedCapital);
+        }
         this.scheduleTheme(config);
       } catch (err) {
         console.error(`Failed to start theme ${config.id} (${config.name}):`, err);
@@ -201,6 +209,25 @@ export class ThemeRunner {
       [themeId],
     );
 
+    // Compute win rate from filled sell orders with realized_pnl
+    const winLossStats = await execGet<{ wins: number; losses: number }>(
+      this.db,
+      convertPlaceholders(
+        `SELECT
+           COUNT(CASE WHEN realized_pnl > 0 THEN 1 END) as wins,
+           COUNT(CASE WHEN realized_pnl < 0 THEN 1 END) as losses
+         FROM sim_sub_orders
+         WHERE theme_id = ? AND side = 'sell' AND status = 'filled'`,
+        this.db.backend,
+      ),
+      [themeId],
+    );
+
+    const closedTrades = (winLossStats?.wins ?? 0) + (winLossStats?.losses ?? 0);
+    const winRate = closedTrades > 0
+      ? (winLossStats!.wins / closedTrades)
+      : 0;
+
     const drawdownPct = peakBalance > 0
       ? ((peakBalance - currentBalance) / peakBalance) * 100
       : 0;
@@ -216,7 +243,7 @@ export class ThemeRunner {
       drawdownPct,
       totalTrades: tradeStats?.total ?? 0,
       filledTrades: tradeStats?.filled ?? 0,
-      winRate: 0, // TODO: compute from individual trade P&L
+      winRate,
       realizedPnl,
       openPositions: positions.length,
       status: config.enabled ? "active" : "stopped",

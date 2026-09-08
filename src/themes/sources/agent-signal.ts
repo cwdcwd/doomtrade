@@ -85,9 +85,11 @@ export class AgentSignalSource implements SignalSource {
         reason: String(item.reason ?? item.rationale ?? "Agent recommendation"),
         suggestedQuantity: item.suggestedQuantity ?? item.quantity,
       })).filter((s: ThemeSignal) => s.symbol.length > 0);
-    } catch {
-      // If parsing fails, return no signals
-      signals = [];
+    } catch (err) {
+      // Surface parse errors with context for observability (fixes #39)
+      throw new Error(
+        `Failed to parse agent response as JSON: ${(err as Error).message}. Response: ${response.slice(0, 200)}`,
+      );
     }
 
     return signals;

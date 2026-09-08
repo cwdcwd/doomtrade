@@ -77,10 +77,21 @@ export const ListTradesQuerySchema = z.object({
   symbol: z.string().optional(),
   status: z.enum(["pending", "filled", "cancelled", "rejected"]).optional(),
   decisionId: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
   limit: z.coerce.number().int().min(1).max(1000).default(100),
   offset: z.coerce.number().int().min(0).default(0),
 });
 export type ListTradesQuery = z.infer<typeof ListTradesQuerySchema>;
+
+// ── Trade analytics ──────────────────────────────────────────────
+
+export const TradeAnalyticsQuerySchema = z.object({
+  symbol: z.string().optional(),
+  startDate: z.string().optional(),
+  endDate: z.string().optional(),
+});
+export type TradeAnalyticsQuery = z.infer<typeof TradeAnalyticsQuerySchema>;
 
 // ── Theme endpoints ─────────────────────────────────────────────
 

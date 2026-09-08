@@ -25,6 +25,7 @@ import type { MarketDataService, Bar, Timeframe } from "../../market/market.js";
 import { smaCrossover, rsiSignal, type Signal } from "../../research/indicators.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
 import { ThemeStore } from "../theme-store.js";
+import { isWithinAllocationLimit } from "../allocation-check.js";
 
 // ── Config types (mirrors momentum-screen.ts for self-containment) ──
 
@@ -222,6 +223,17 @@ export class MomentumRotationStrategy implements ThemeStrategy {
         const qty = Math.floor(budget / price);
         if (qty <= 0) {
           errors.push(`Insufficient allocation for ${signal.symbol} at $${price}`);
+          continue;
+        }
+
+        // Enforce maxTotalAllocationPct (fixes #37)
+        const buyValue = qty * price;
+        const allocPositions = await subAccount.getPositions();
+        const allocCheck = isWithinAllocationLimit(
+          allocPositions, equity, config.maxTotalAllocationPct, config.maxAllocationPct, buyValue,
+        );
+        if (!allocCheck.allowed) {
+          errors.push(`Allocation limit for ${signal.symbol}: ${allocCheck.reason}`);
           continue;
         }
 

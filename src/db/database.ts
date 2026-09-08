@@ -267,6 +267,7 @@ const MIGRATIONS: { version: number; name: string; sql: string }[] = [
         status TEXT NOT NULL CHECK (status IN ('pending', 'filled', 'cancelled')),
         created_at TEXT NOT NULL DEFAULT ({now}),
         filled_at TEXT,
+        realized_pnl REAL NOT NULL DEFAULT 0,
         FOREIGN KEY (theme_id) REFERENCES themes(id)
       );
     `,

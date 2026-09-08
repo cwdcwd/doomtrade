@@ -176,7 +176,9 @@ describe("AgentDrivenStrategy", () => {
     const result = await strategy.evaluate(ctx, config!);
 
     expect(result.signals).toHaveLength(0);
-    expect(result.errors).toContain("Agent returned no signals");
+    // After fix #39, parse errors are surfaced (not silently swallowed)
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(result.errors[0]).toMatch(/Agent signal fetch failed.*Failed to parse agent response/);
 
     vi.doUnmock("@cwdcwd/agent-bridge");
   });

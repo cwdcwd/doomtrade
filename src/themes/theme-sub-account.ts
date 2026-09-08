@@ -192,13 +192,13 @@ export class ThemeSubAccount {
     await execRun(
       this.db,
       convertPlaceholders(
-        `INSERT INTO sim_sub_orders (id, theme_id, symbol, side, order_type, quantity, limit_price, status, filled_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, 'filled', ?)`,
+        `INSERT INTO sim_sub_orders (id, theme_id, symbol, side, order_type, quantity, limit_price, status, filled_at, realized_pnl)
+         VALUES (?, ?, ?, ?, ?, ?, ?, 'filled', ?, ?)`,
         this.db.backend,
       ),
       [id, this.themeId, order.symbol, order.side,
        order.orderType === "stop" ? "market" : order.orderType,
-       order.quantity, order.limitPrice ?? null, timestamp],
+       order.quantity, order.limitPrice ?? null, timestamp, realizedPnl],
     );
 
     return {

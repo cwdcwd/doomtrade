@@ -139,6 +139,7 @@ async function main() {
     marketData,
     research,
     themeRunner,
+    db,
   };
 
   const app = express();
