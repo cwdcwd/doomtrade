@@ -117,7 +117,9 @@ export class MomentumRotationStrategy implements ThemeStrategy {
     const selectedSymbols = new Set(selected.map((s) => s.symbol));
 
     // ── Set up sub-account for order execution ──────────────────
-    const subAccount = new ThemeSubAccount(ctx.db, config.id, {
+    // Use ctx.exchange (AgentExchange) when provided by the agent pipeline,
+    // otherwise fall back to a ThemeSubAccount (theme runner).
+    const subAccount = ctx.exchange ?? new ThemeSubAccount(ctx.db, config.id, {
       getCurrentPrice: () => null,
     });
 
@@ -220,7 +222,7 @@ export class MomentumRotationStrategy implements ThemeStrategy {
           continue;
         }
 
-        const qty = Math.floor(budget / price);
+        const qty = budget / price;
         if (qty <= 0) {
           errors.push(`Insufficient allocation for ${signal.symbol} at $${price}`);
           continue;

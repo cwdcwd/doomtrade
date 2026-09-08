@@ -55,8 +55,10 @@ export class AgentDrivenStrategy implements ThemeStrategy {
       };
     }
 
-    // Get sub-account for price/equity context
-    const subAccount = new ThemeSubAccount(ctx.db, config.id);
+    // Get sub-account for price/equity context — use ctx.exchange
+    // (AgentExchange) when provided by the agent pipeline, otherwise
+    // fall back to ThemeSubAccount.
+    const subAccount = ctx.exchange ?? new ThemeSubAccount(ctx.db, config.id);
 
     let equity = 0;
     try {
@@ -135,7 +137,7 @@ export class AgentDrivenStrategy implements ThemeStrategy {
 
       // Calculate quantity from allocation
       const maxAllocation = equity * (config.maxAllocationPct / 100);
-      const qty = signal.suggestedQuantity ?? Math.floor(maxAllocation / price);
+      const qty = signal.suggestedQuantity ?? maxAllocation / price;
       if (qty <= 0) {
         errors.push(`Insufficient allocation for ${signal.symbol}`);
         continue;

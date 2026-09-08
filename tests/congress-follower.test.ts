@@ -401,9 +401,9 @@ describe("CongressFollowerStrategy", () => {
     const result = await strategy.evaluate(ctx, config!);
 
     expect(result.trades).toHaveLength(1);
-    // maxAllocation = 50000 * 0.10 = 5000, price = 120, qty = floor(5000/120) = 41
-    expect(result.trades[0].quantity).toBe(Math.floor(5000 / 120));
-    expect(result.trades[0].quantity).toBe(41);
+    // maxAllocation = 50000 * 0.10 = 5000, price = 120, qty = 5000/120 = 41.67
+    expect(result.trades[0].quantity).toBe(5000 / 120);
+    expect(result.trades[0].quantity).toBeCloseTo(41.67, 1);
 
     vi.restoreAllMocks();
   });
