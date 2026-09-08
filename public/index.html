@@ -250,29 +250,15 @@ function toast(msg, ok) {
 }
 
 // ── Fetch & render ───────────────────────────────
+// Fast refresh: agents only (10s)
 async function refresh() {
   const dot = document.getElementById('dot');
   try {
-    const SYMBOLS = ['BTC/USDT','ETH/USDT','SOL/USDT','XRP/USDT','ADA/USDT','DOGE/USDT','AVAX/USDT'];
-
-    const [health, agentsR, leaderR, snapR] = await Promise.all([
+    const [health, agentsR, leaderR] = await Promise.all([
       api('/api/health'),
       api('/api/agents'),
       api('/api/agents/leaderboard'),
-      api('/api/market/snapshot?symbols=' + SYMBOLS.join(',')),
     ]);
-
-    // Fetch research analysis for each symbol in parallel (lightweight)
-    const analyses = await Promise.all(
-      SYMBOLS.map(async s => {
-        try {
-          const r = await api(`/api/research/analyze?symbol=${encodeURIComponent(s)}&timeframe=1Day&range=1m`);
-          return { symbol: s, analysis: r.analysis || r };
-        } catch { return { symbol: s, analysis: null }; }
-      })
-    );
-
-    renderMarket(snapR.snapshots || [], analyses);
 
     const agents = agentsR.agents || [];
     const ranks = {};
@@ -301,6 +287,29 @@ async function refresh() {
   } catch(e) {
     dot.classList.add('error');
     document.getElementById('ts').textContent = 'Error: ' + e.message;
+  }
+}
+
+// Slow refresh: market data (60s, non-blocking)
+const MARKET_SYMBOLS = ['BTC/USDT','ETH/USDT','SOL/USDT','XRP/USDT','ADA/USDT','DOGE/USDT','AVAX/USDT'];
+
+async function refreshMarket() {
+  try {
+    const snapR = await api('/api/market/snapshot?symbols=' + MARKET_SYMBOLS.join(','));
+
+    // Fetch research analyses in parallel (each takes ~3s from Kraken)
+    const analyses = await Promise.all(
+      MARKET_SYMBOLS.map(async s => {
+        try {
+          const r = await api(`/api/research/analyze?symbol=${encodeURIComponent(s)}&timeframe=1Day&range=1m`);
+          return { symbol: s, analysis: r.analysis || r };
+        } catch { return { symbol: s, analysis: null }; }
+      })
+    );
+
+    renderMarket(snapR.snapshots || [], analyses);
+  } catch(e) {
+    console.error('Market refresh error:', e);
   }
 }
 
@@ -483,7 +492,9 @@ async function runA2A() {
 
 // ── Init ─────────────────────────────────────────
 refresh();
-setInterval(refresh, 10000);
+refreshMarket();
+setInterval(refresh, 10000);       // agents every 10s
+setInterval(refreshMarket, 60000); // market every 60s (Kraken is slow)
 </script>
 </body>
 </html>
