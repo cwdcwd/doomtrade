@@ -211,149 +211,30 @@ export function createApiRouter(state: AppState): Router {
     });
   });
 
-  // ── Trade analytics ────────────────────────────────────────────
+  // ── Trade analytics ─────────────────────────────────────────
 
   router.get("/trades/analytics", async (req: Request, res: Response) => {
-    const parsed = TradeAnalyticsQuerySchema.safeParse(req.query);
+    const AnalyticsQuerySchema = z.object({
+      symbol: z.string().optional(),
+      startDate: z.string().optional(),
+      endDate: z.string().optional(),
+    });
+    const parsed = AnalyticsQuerySchema.safeParse(req.query);
     if (!parsed.success) {
       res.status(400).json({ error: "Validation failed", details: parsed.error.issues });
       return;
     }
 
-    const { symbol, startDate, endDate } = parsed.data;
+    const analytics = await state.tradeEngine.getAnalytics({
+      symbol: parsed.data.symbol,
+      startDate: parsed.data.startDate,
+      endDate: parsed.data.endDate,
+    });
 
-    const conditions: string[] = ["status = 'filled'"];
-    const params: (string | number)[] = [];
-
-    if (symbol) {
-      conditions.push("symbol = ?");
-      params.push(symbol);
-    }
-    if (startDate) {
-      conditions.push("timestamp >= ?");
-      params.push(startDate);
-    }
-    if (endDate) {
-      conditions.push("timestamp <= ?");
-      params.push(endDate);
-    }
-
-    const where = conditions.join(" AND ");
-
-    const db = state.db;
-    if (!db) {
-      res.status(503).json({ error: "Database not available" });
-      return;
-    }
-
-    const { execGet, execAll, convertPlaceholders } = await import("../db/database.js");
-
-    try {
-      // Aggregate stats from filled trades (all trades)
-      const agg = await execGet<{
-        total: number;
-        total_pnl: number;
-        avg_pnl: number;
-      }>(
-        db,
-        convertPlaceholders(
-          `SELECT
-             COUNT(*) as total,
-             COALESCE(SUM(realized_pnl), 0) as total_pnl,
-             COALESCE(AVG(realized_pnl), 0) as avg_pnl
-           FROM trades WHERE ${where}`,
-          db.backend,
-        ),
-        params,
-      );
-
-      // Win/loss stats from sell trades only (closed positions)
-      const sellConditions = [...conditions, "side = 'sell'"];
-      const sellParams = [...params];
-      const sellWhere = sellConditions.join(" AND ");
-
-      const winLossAgg = await execGet<{ wins: number; losses: number }>(
-        db,
-        convertPlaceholders(
-          `SELECT
-             COUNT(CASE WHEN realized_pnl > 0 THEN 1 END) as wins,
-             COUNT(CASE WHEN realized_pnl < 0 THEN 1 END) as losses
-           FROM trades WHERE ${sellWhere}`,
-          db.backend,
-        ),
-        sellParams,
-      );
-
-      const total = agg?.total ?? 0;
-      const wins = winLossAgg?.wins ?? 0;
-      const losses = winLossAgg?.losses ?? 0;
-      const totalPnl = agg?.total_pnl ?? 0;
-      const avgPnl = agg?.avg_pnl ?? 0;
-      const closedTrades = wins + losses;
-      const winRate = closedTrades > 0 ? wins / closedTrades : 0;
-
-      // Per-trade returns for Sharpe ratio calculation (sell trades only)
-      const tradeRows = await execAll<{ realized_pnl: number }>(
-        db,
-        convertPlaceholders(
-          `SELECT realized_pnl FROM trades WHERE ${sellWhere} ORDER BY timestamp ASC`,
-          db.backend,
-        ),
-        sellParams,
-      );
-
-      const returns = tradeRows.map((r) => r.realized_pnl);
-      const avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
-      const variance = returns.length > 0
-        ? returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length
-        : 0;
-      const stdDev = Math.sqrt(variance);
-      // Annualized Sharpe ratio (assuming daily trades, 252 trading days)
-      const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev) * Math.sqrt(252) : 0;
-
-      // Max drawdown from portfolio history (equity curve)
-      const equityRows = await execAll<{ timestamp: string; equity: number }>(
-        db,
-        convertPlaceholders(
-          `SELECT timestamp, equity FROM portfolio_history
-           WHERE 1=1
-             ${startDate ? " AND timestamp >= ?" : ""}
-             ${endDate ? " AND timestamp <= ?" : ""}
-           ORDER BY timestamp ASC`,
-          db.backend,
-        ),
-        [
-          ...(startDate ? [startDate] : []),
-          ...(endDate ? [endDate] : []),
-        ],
-      );
-
-      let maxDrawdown = 0;
-      let peakEquity = 0;
-      for (const row of equityRows) {
-        peakEquity = Math.max(peakEquity, row.equity);
-        if (peakEquity > 0) {
-          const drawdown = ((peakEquity - row.equity) / peakEquity) * 100;
-          maxDrawdown = Math.max(maxDrawdown, drawdown);
-        }
-      }
-
-      res.json({
-        mode: state.currentMode,
-        analytics: {
-          totalTrades: total,
-          wins,
-          losses,
-          winRate,
-          avgReturn,
-          totalPnl,
-          sharpeRatio,
-          maxDrawdownPct: maxDrawdown,
-        },
-      });
-    } catch (err) {
-      res.status(500).json({ error: "Failed to compute analytics", message: (err as Error).message });
-    }
+    res.json({
+      mode: state.currentMode,
+      analytics,
+    });
   });
 
   router.get("/trades/:id", async (req: Request, res: Response) => {

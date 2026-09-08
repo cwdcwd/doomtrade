@@ -612,12 +612,11 @@ describe("API", () => {
       expect(resp.status).toBe(200);
       expect(resp.body.mode).toBe("sim");
       expect(resp.body.analytics).toBeDefined();
-      expect(resp.body.analytics.totalTrades).toBe(0);
-      expect(resp.body.analytics.wins).toBe(0);
-      expect(resp.body.analytics.losses).toBe(0);
-      expect(resp.body.analytics.winRate).toBe(0);
-      expect(resp.body.analytics.sharpeRatio).toBe(0);
-      expect(resp.body.analytics.maxDrawdownPct).toBe(0);
+      expect(resp.body.analytics.tradeCount).toBe(0);
+      expect(resp.body.analytics.winLoss.wins).toBe(0);
+      expect(resp.body.analytics.winLoss.losses).toBe(0);
+      expect(resp.body.analytics.winLoss.winRate).toBe(0);
+      expect(resp.body.analytics.equity.drawdownPct).toBe(0);
     });
 
     it("should compute analytics after trades", async () => {
@@ -658,12 +657,12 @@ describe("API", () => {
       const resp = await supertest(app).get("/api/trades/analytics");
 
       expect(resp.status).toBe(200);
-      expect(resp.body.analytics.totalTrades).toBe(2);
-      expect(resp.body.analytics.wins).toBe(1);
-      expect(resp.body.analytics.losses).toBe(0);
-      expect(resp.body.analytics.winRate).toBe(1);
-      expect(resp.body.analytics.totalPnl).toBeGreaterThan(0);
-      expect(resp.body.analytics.avgReturn).toBeGreaterThan(0);
+      expect(resp.body.analytics.tradeCount).toBe(2);
+      expect(resp.body.analytics.filledCount).toBe(2);
+      expect(resp.body.analytics.winLoss.wins).toBe(1);
+      expect(resp.body.analytics.winLoss.losses).toBe(0);
+      expect(resp.body.analytics.winLoss.winRate).toBe(50);
+      expect(resp.body.analytics.pnl.netPnl).toBeGreaterThan(0);
     });
 
     it("should filter analytics by symbol", async () => {
@@ -704,7 +703,7 @@ describe("API", () => {
       const resp = await supertest(app).get("/api/trades/analytics?symbol=AAPL");
 
       expect(resp.status).toBe(200);
-      expect(resp.body.analytics.totalTrades).toBe(1);
+      expect(resp.body.analytics.tradeCount).toBe(1);
     });
   });
 

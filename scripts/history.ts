@@ -1,14 +1,14 @@
 /**
- * history.ts — CLI for trade history and performance analytics.
+ * history.ts — CLI for reviewing trade history and performance analytics.
  *
  * Usage:
- *   npx tsx scripts/history.ts                          # show trade history + analytics
- *   npx tsx scripts/history.ts --symbol AAPL            # filter by symbol
- *   npx tsx scripts/history.ts --limit 50               # limit number of trades
- *   npx tsx scripts/history.ts --start 2026-09-01       # date range start (ISO)
- *   npx tsx scripts/history.ts --end 2026-09-30         # date range end (ISO)
- *   npx tsx scripts/history.ts --analytics              # show only analytics summary
- *   npx tsx scripts/history.ts --equity                 # show equity curve
+ *   npx tsx scripts/history.ts                          # full history + analytics
+ *   npx tsx scripts/history.ts --symbol BTC/USDT        # filter by symbol
+ *   npx tsx scripts/history.ts --limit 20               # limit trades shown
+ *   npx tsx scripts/history.ts --start 2026-09-01       # date range start
+ *   npx tsx scripts/history.ts --end 2026-09-06         # date range end
+ *   npx tsx scripts/history.ts --trades-only            # just trades table
+ *   npx tsx scripts/history.ts --analytics-only         # just performance analytics
  *
  * Environment:
  *   DOOMTRADE_URL — base URL of the DoomTrade API (default: http://localhost:3000)
@@ -21,8 +21,8 @@ interface Args {
   limit: number;
   startDate?: string;
   endDate?: string;
+  tradesOnly: boolean;
   analyticsOnly: boolean;
-  equityCurve: boolean;
 }
 
 function parseArgs(): Args {
@@ -32,162 +32,207 @@ function parseArgs(): Args {
     return idx >= 0 ? args[idx + 1] : undefined;
   };
 
+  const symbol = get("--symbol");
+  const limitStr = get("--limit");
+  const startDate = get("--start");
+  const endDate = get("--end");
+  const tradesOnly = args.includes("--trades-only");
+  const analyticsOnly = args.includes("--analytics-only");
+
   return {
-    symbol: get("--symbol"),
-    limit: get("--limit") ? parseInt(get("--limit")!, 10) : 100,
-    startDate: get("--start"),
-    endDate: get("--end"),
-    analyticsOnly: args.includes("--analytics"),
-    equityCurve: args.includes("--equity"),
+    symbol,
+    limit: limitStr ? parseInt(limitStr, 10) : 100,
+    startDate,
+    endDate,
+    tradesOnly,
+    analyticsOnly,
   };
 }
 
-async function fetchJson(path: string): Promise<Record<string, unknown>> {
-  const resp = await fetch(`${BASE_URL}${path}`);
-  if (!resp.ok) {
-    const text = await resp.text().catch(() => "");
-    console.error(`GET ${path} failed: ${resp.status} ${text}`);
-    process.exit(1);
-  }
-  return resp.json() as Promise<Record<string, unknown>>;
+function formatMoney(n: number): string {
+  const sign = n >= 0 ? "+" : "";
+  return `${sign}$${Math.abs(n).toFixed(2)}`;
 }
 
-function buildQueryString(args: Args, extra?: Record<string, string | undefined>): string {
+function formatPlainMoney(n: number): string {
+  return `$${n.toFixed(2)}`;
+}
+
+interface TradeRow {
+  id: string;
+  timestamp: string;
+  symbol: string;
+  side: string;
+  quantity: number;
+  orderType: string;
+  fillPrice: number | null;
+  status: string;
+  fee: number;
+  realizedPnl: number;
+  mode: string;
+  executor: string;
+}
+
+interface AnalyticsData {
+  tradeCount: number;
+  filledCount: number;
+  pendingCount: number;
+  rejectedCount: number;
+  cancelledCount: number;
+  winLoss: {
+    wins: number;
+    losses: number;
+    breakeven: number;
+    totalClosed: number;
+    winRate: number;
+  };
+  pnl: {
+    totalRealized: number;
+    totalFees: number;
+    netPnl: number;
+    grossProfit: number;
+    grossLoss: number;
+    avgWin: number;
+    avgLoss: number;
+    profitFactor: number;
+  };
+  equity: {
+    startEquity: number;
+    endEquity: number;
+    maxEquity: number;
+    minEquity: number;
+    drawdownPct: number;
+  };
+}
+
+async function fetchTrades(args: Args): Promise<void> {
   const params = new URLSearchParams();
   if (args.symbol) params.set("symbol", args.symbol);
   if (args.startDate) params.set("startDate", args.startDate);
   if (args.endDate) params.set("endDate", args.endDate);
-  if (extra) {
-    for (const [k, v] of Object.entries(extra)) {
-      if (v !== undefined) params.set(k, v);
-    }
+  params.set("limit", String(args.limit));
+
+  const url = `${BASE_URL}/api/trades?${params.toString()}`;
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    console.error(`GET /api/trades failed: ${resp.status}`);
+    return;
   }
-  const qs = params.toString();
-  return qs ? `?${qs}` : "";
-}
 
-function formatMoney(n: number): string {
-  return `$${n.toFixed(2)}`;
-}
+  const data = await resp.json() as { trades: TradeRow[]; count: number; mode: string };
+  const trades = data.trades ?? [];
 
-function formatPct(n: number): string {
-  return `${n.toFixed(2)}%`;
-}
+  console.log("=== Trade History ===");
+  console.log(`Mode: ${data.mode}`);
+  console.log(`Total: ${data.count} trades (showing ${trades.length})`);
 
-async function showAnalytics(args: Args): Promise<void> {
-  const qs = buildQueryString(args);
-  const data = await fetchJson(`/api/trades/analytics${qs}`);
-  const a = data.analytics as {
-    totalTrades: number;
-    wins: number;
-    losses: number;
-    winRate: number;
-    avgReturn: number;
-    totalPnl: number;
-    sharpeRatio: number;
-    maxDrawdownPct: number;
-  };
-
-  console.log("\n=== Performance Analytics ===");
-  console.log(`Total Trades:  ${a.totalTrades}`);
-  console.log(`Wins:          ${a.wins}`);
-  console.log(`Losses:        ${a.losses}`);
-  console.log(`Win Rate:      ${formatPct(a.winRate * 100)}`);
-  console.log(`Avg Return:    ${formatMoney(a.avgReturn)}`);
-  console.log(`Total P&L:     ${formatMoney(a.totalPnl)}`);
-  console.log(`Sharpe Ratio:  ${a.sharpeRatio.toFixed(3)}`);
-  console.log(`Max Drawdown:  ${formatPct(a.maxDrawdownPct)}`);
-}
-
-async function showTradeHistory(args: Args): Promise<void> {
-  const qs = buildQueryString(args, { limit: String(args.limit) });
-  const data = await fetchJson(`/api/trades${qs}`);
-  const trades = data.trades as Array<{
-    id: string;
-    symbol: string;
-    side: string;
-    quantity: number;
-    fillPrice: number | null;
-    status: string;
-    fee: number;
-    realizedPnl: number;
-    timestamp: string;
-  }>;
-
-  console.log("\n=== Trade History ===");
-  console.log(`Total: ${data.count} trades${args.symbol ? ` for ${args.symbol}` : ""}\n`);
+  if (args.symbol) console.log(`Filter: symbol=${args.symbol}`);
+  if (args.startDate || args.endDate) {
+    console.log(`Date range: ${args.startDate ?? "beginning"} → ${args.endDate ?? "now"}`);
+  }
 
   if (trades.length === 0) {
-    console.log("No trades found.");
+    console.log("\nNo trades found.");
     return;
   }
 
   // Table header
-  const header = `${"Timestamp".padEnd(26)} ${"Symbol".padEnd(10)} ${"Side".padEnd(6)} ${"Qty".padStart(10)} ${"Fill Price".padStart(12)} ${"P&L".padStart(12)} ${"Status".padEnd(10)}`;
-  console.log(header);
-  console.log("-".repeat(header.length));
+  console.log("");
+  const fmt = (s: string, w: number) => s.length > w ? s.slice(0, w - 1) + "…" : s.padEnd(w);
+  console.log(
+    `  ${fmt("Date", 20)}  ${fmt("Symbol", 12)}  ${fmt("Side", 5)}  ${fmt("Qty", 10)}  ${fmt("Fill Price", 12)}  ${fmt("Fee", 10)}  ${fmt("P&L", 12)}  ${fmt("Status", 10)}  ${fmt("Executor", 10)}`,
+  );
+  console.log(`  ${"─".repeat(103)}`);
 
   for (const t of trades) {
-    const ts = t.timestamp.slice(0, 23);
-    const pnl = t.realizedPnl !== 0 ? formatMoney(t.realizedPnl) : "-";
+    const date = new Date(t.timestamp).toLocaleString();
+    const pnlStr = t.realizedPnl !== 0 ? formatMoney(t.realizedPnl) : "—";
+    const fillStr = t.fillPrice !== null ? formatPlainMoney(t.fillPrice) : "—";
+    const feeStr = t.fee > 0 ? formatPlainMoney(t.fee) : "—";
     console.log(
-      `${ts.padEnd(26)} ${t.symbol.padEnd(10)} ${t.side.padEnd(6)} ${String(t.quantity).padStart(10)} ${(t.fillPrice ? formatMoney(t.fillPrice) : "-").padStart(12)} ${pnl.padStart(12)} ${t.status.padEnd(10)}`,
+      `  ${fmt(date, 20)}  ${fmt(t.symbol, 12)}  ${fmt(t.side.toUpperCase(), 5)}  ${fmt(String(t.quantity), 10)}  ${fmt(fillStr, 12)}  ${fmt(feeStr, 10)}  ${fmt(pnlStr, 12)}  ${fmt(t.status, 10)}  ${fmt(t.executor, 10)}`,
     );
   }
 }
 
-async function showEquityCurve(args: Args): Promise<void> {
-  const qs = buildQueryString(args, { limit: "1000" });
-  const data = await fetchJson(`/api/portfolio/history${qs}`);
-  const history = data.history as Array<{
-    timestamp: string;
-    equity: number;
-    cash: number;
-    positionsValue: number;
-    unrealizedPnl: number;
-    realizedPnl: number;
-  }>;
+async function fetchAnalytics(args: Args): Promise<void> {
+  const params = new URLSearchParams();
+  if (args.symbol) params.set("symbol", args.symbol);
+  if (args.startDate) params.set("startDate", args.startDate);
+  if (args.endDate) params.set("endDate", args.endDate);
 
-  console.log("\n=== Equity Curve ===");
-  console.log(`Total points: ${data.count}\n`);
-
-  if (history.length === 0) {
-    console.log("No portfolio history found.");
+  const url = `${BASE_URL}/api/trades/analytics?${params.toString()}`;
+  const resp = await fetch(url);
+  if (!resp.ok) {
+    console.error(`GET /api/trades/analytics failed: ${resp.status}`);
     return;
   }
 
-  const header = `${"Timestamp".padEnd(26)} ${"Equity".padStart(14)} ${"Cash".padStart(14)} ${"Positions".padStart(14)} ${"Unrealized P&L".padStart(16)} ${"Realized P&L".padStart(14)}`;
-  console.log(header);
-  console.log("-".repeat(header.length));
+  const data = await resp.json() as { analytics: AnalyticsData; mode: string };
+  const a = data.analytics;
 
-  for (const h of history) {
-    const ts = h.timestamp.slice(0, 23);
-    console.log(
-      `${ts.padEnd(26)} ${formatMoney(h.equity).padStart(14)} ${formatMoney(h.cash).padStart(14)} ${formatMoney(h.positionsValue).padStart(14)} ${formatMoney(h.unrealizedPnl).padStart(16)} ${formatMoney(h.realizedPnl).padStart(14)}`,
-    );
+  console.log("\n=== Performance Analytics ===");
+  console.log(`Mode: ${data.mode}`);
+
+  // Trade counts
+  console.log("\n— Trade Counts —");
+  console.log(`  Total trades:    ${a.tradeCount}`);
+  console.log(`  Filled:          ${a.filledCount}`);
+  console.log(`  Pending:         ${a.pendingCount}`);
+  console.log(`  Rejected:        ${a.rejectedCount}`);
+  console.log(`  Cancelled:       ${a.cancelledCount}`);
+
+  // Win/Loss
+  console.log("\n— Win/Loss —");
+  const totalClosed = a.winLoss.totalClosed;
+  if (totalClosed > 0) {
+    console.log(`  Wins:            ${a.winLoss.wins}`);
+    console.log(`  Losses:          ${a.winLoss.losses}`);
+    console.log(`  Breakeven:       ${a.winLoss.breakeven}`);
+    console.log(`  Win rate:        ${a.winLoss.winRate.toFixed(1)}%`);
+  } else {
+    console.log("  No closed trades with realized P&L yet.");
   }
 
-  // Summary
-  const first = history[0];
-  const last = history[history.length - 1];
-  const totalReturn = last.equity - first.equity;
-  const totalReturnPct = first.equity > 0 ? (totalReturn / first.equity) * 100 : 0;
-  console.log(`\nTotal Return: ${formatMoney(totalReturn)} (${formatPct(totalReturnPct)})`);
+  // P&L
+  console.log("\n— P&L —");
+  console.log(`  Gross profit:    ${formatPlainMoney(a.pnl.grossProfit)}`);
+  console.log(`  Gross loss:      ${formatPlainMoney(Math.abs(a.pnl.grossLoss))}`);
+  console.log(`  Total realized:  ${formatMoney(a.pnl.totalRealized)}`);
+  console.log(`  Total fees:      ${formatPlainMoney(a.pnl.totalFees)}`);
+  console.log(`  Net P&L:         ${formatMoney(a.pnl.netPnl)}`);
+  if (a.pnl.avgWin > 0) console.log(`  Avg win:         ${formatPlainMoney(a.pnl.avgWin)}`);
+  if (a.pnl.avgLoss < 0) console.log(`  Avg loss:        ${formatPlainMoney(Math.abs(a.pnl.avgLoss))}`);
+  const pfStr = a.pnl.profitFactor === Infinity ? "∞" : a.pnl.profitFactor.toFixed(2);
+  console.log(`  Profit factor:   ${pfStr}`);
+
+  // Equity curve
+  console.log("\n— Equity Curve —");
+  if (a.equity.startEquity > 0 || a.equity.endEquity > 0) {
+    console.log(`  Start equity:    ${formatPlainMoney(a.equity.startEquity)}`);
+    console.log(`  Current equity:  ${formatPlainMoney(a.equity.endEquity)}`);
+    console.log(`  Max equity:      ${formatPlainMoney(a.equity.maxEquity)}`);
+    console.log(`  Min equity:      ${formatPlainMoney(a.equity.minEquity)}`);
+    console.log(`  Max drawdown:    ${a.equity.drawdownPct.toFixed(2)}%`);
+    const totalReturn = a.equity.startEquity > 0
+      ? ((a.equity.endEquity - a.equity.startEquity) / a.equity.startEquity) * 100
+      : 0;
+    console.log(`  Total return:    ${formatMoney(totalReturn)}%`);
+  } else {
+    console.log("  No equity history yet (no portfolio checkpoints recorded).");
+  }
 }
 
 async function main() {
   const args = parseArgs();
 
-  console.log(`DoomTrade — Trade History & Analytics`);
-  console.log(`API: ${BASE_URL}`);
-
-  if (args.equityCurve) {
-    await showEquityCurve(args);
-  } else if (args.analyticsOnly) {
-    await showAnalytics(args);
+  if (args.analyticsOnly) {
+    await fetchAnalytics(args);
+  } else if (args.tradesOnly) {
+    await fetchTrades(args);
   } else {
-    await showTradeHistory(args);
-    await showAnalytics(args);
+    await fetchTrades(args);
+    await fetchAnalytics(args);
   }
 }
 
