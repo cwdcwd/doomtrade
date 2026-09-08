@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>DoomTrade — Agent Trading Dashboard</title>
+  <title>DoomTrade — Agent Trading Monitor</title>
   <style>
     :root {
       --bg: #0a0e14;
@@ -16,174 +16,146 @@
       --dim: #4a5462;
       --green: #26d07c;
       --red: #f04444;
-      --blue: #4c8dff;
       --yellow: #f5a623;
       --purple: #b884ff;
       --cyan: #2dd4d4;
-      --accent: #26d07c;
     }
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
       background: var(--bg);
       color: var(--text);
-      font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', monospace;
+      font-family: 'SF Mono', 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
       font-size: 13px;
       line-height: 1.5;
-      padding: 0;
-      min-height: 100vh;
     }
-    .mono { font-family: inherit; }
-    .sans { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; }
+    .app { max-width: 1400px; margin: 0 auto; padding: 16px 20px 40px; }
 
-    /* ── Layout ───────────────────────────────── */
-    .app { max-width: 1400px; margin: 0 auto; padding: 16px; }
-
-    /* ── Header ───────────────────────────────── */
+    /* Header */
     .header {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 12px 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
+      padding-bottom: 16px; border-bottom: 1px solid var(--border); margin-bottom: 20px;
     }
-    .header-left { display: flex; align-items: center; gap: 12px; }
     .logo {
       font-size: 18px; font-weight: 700; letter-spacing: -0.5px;
       background: linear-gradient(135deg, var(--green), var(--cyan));
       -webkit-background-clip: text; -webkit-text-fill-color: transparent;
     }
-    .header-sub { font-size: 11px; color: var(--muted); }
+    .header-sub { font-size: 11px; color: var(--muted); margin-top: 2px; }
     .header-right { display: flex; align-items: center; gap: 12px; }
-    .status-dot {
-      width: 7px; height: 7px; border-radius: 50%; background: var(--green);
-      box-shadow: 0 0 8px rgba(38,208,124,0.5);
-    }
-    .status-dot.error { background: var(--red); box-shadow: 0 0 8px rgba(240,68,68,0.5); }
-    .last-update { font-size: 11px; color: var(--muted); }
-    .mode-badge {
-      padding: 3px 10px; border-radius: 4px; font-size: 10px; font-weight: 700;
-      text-transform: uppercase; letter-spacing: 1px;
-    }
-    .mode-sim { background: rgba(245,166,35,0.15); color: var(--yellow); border: 1px solid rgba(245,166,35,0.3); }
-    .mode-live { background: rgba(240,68,68,0.15); color: var(--red); border: 1px solid rgba(240,68,68,0.3); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--green); box-shadow: 0 0 6px rgba(38,208,124,0.4); }
+    .dot.error { background: var(--red); box-shadow: 0 0 6px rgba(240,68,68,0.4); }
+    .timestamp { font-size: 11px; color: var(--muted); }
+    .badge { padding: 3px 8px; border-radius: 4px; font-size: 10px; font-weight: 700; letter-spacing: 1px; }
+    .badge-sim { background: rgba(245,166,35,0.12); color: var(--yellow); border: 1px solid rgba(245,166,35,0.25); }
 
-    /* ── Toolbar ──────────────────────────────── */
-    .toolbar { display: flex; gap: 8px; margin-bottom: 20px; flex-wrap: wrap; }
+    /* Toolbar */
+    .toolbar { display: flex; gap: 8px; margin-bottom: 24px; align-items: center; }
     .btn {
-      padding: 7px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+      padding: 6px 14px; border-radius: 5px; font-size: 11px; font-weight: 600;
       border: 1px solid var(--border-light); background: var(--surface);
-      color: var(--text); cursor: pointer; transition: all 0.15s;
-      font-family: inherit;
+      color: var(--muted); cursor: pointer; transition: all 0.15s; font-family: inherit;
     }
-    .btn:hover { background: var(--surface2); border-color: var(--accent); }
-    .btn-primary { background: rgba(38,208,124,0.1); border-color: rgba(38,208,124,0.3); color: var(--green); }
-    .btn-primary:hover { background: rgba(38,208,124,0.2); }
-    .btn-danger { background: rgba(240,68,68,0.1); border-color: rgba(240,68,68,0.3); color: var(--red); }
-    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .btn-loading { opacity: 0.6; pointer-events: none; }
+    .btn:hover { color: var(--text); border-color: var(--border-light); background: var(--surface2); }
+    .btn:disabled { opacity: 0.4; cursor: wait; }
+    .toolbar-spacer { flex: 1; }
+    .toolbar-info { font-size: 11px; color: var(--dim); }
 
-    /* ── Agent Cards ──────────────────────────── */
-    .agents-grid {
-      display: grid; grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
-      gap: 12px; margin-bottom: 20px;
+    /* Agent grid */
+    .grid {
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+      gap: 16px;
     }
-    .agent-card {
+
+    /* Agent card — always expanded */
+    .card {
       background: var(--surface); border: 1px solid var(--border);
-      border-radius: 10px; overflow: hidden; transition: border-color 0.2s;
+      border-radius: 10px; overflow: hidden;
     }
-    .agent-card:hover { border-color: var(--border-light); }
-    .agent-card.expanded { border-color: rgba(38,208,124,0.2); }
-    .agent-header {
+
+    /* Card header */
+    .card-head {
       display: flex; align-items: center; justify-content: space-between;
-      padding: 14px 16px; cursor: pointer; user-select: none;
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
     }
-    .agent-name-row { display: flex; align-items: center; gap: 10px; }
-    .agent-rank {
-      width: 24px; height: 24px; border-radius: 6px; display: flex;
-      align-items: center; justify-content: center; font-size: 11px; font-weight: 700;
-      background: var(--surface2); color: var(--muted);
+    .card-head-left { display: flex; align-items: center; gap: 10px; }
+    .rank {
+      width: 22px; height: 22px; border-radius: 5px; display: flex;
+      align-items: center; justify-content: center; font-size: 10px; font-weight: 700;
+      background: var(--surface2); color: var(--muted); flex-shrink: 0;
     }
-    .agent-rank.rank-1 { background: rgba(245,166,35,0.15); color: var(--yellow); }
-    .agent-rank.rank-2 { background: rgba(173,173,173,0.15); color: #c0c0c0; }
-    .agent-rank.rank-3 { background: rgba(205,127,50,0.15); color: #cd7f32; }
+    .rank.r1 { background: rgba(245,166,35,0.15); color: var(--yellow); }
+    .rank.r2 { background: rgba(173,173,173,0.12); color: #c0c0c0; }
+    .rank.r3 { background: rgba(205,127,50,0.12); color: #cd7f32; }
     .agent-name { font-size: 14px; font-weight: 700; }
-    .agent-strategy { font-size: 11px; color: var(--muted); }
-    .agent-stats { display: flex; gap: 16px; align-items: center; }
-    .agent-stat { text-align: right; }
-    .agent-stat-label { font-size: 10px; color: var(--muted); text-transform: uppercase; }
-    .agent-stat-value { font-size: 15px; font-weight: 700; }
-    .agent-pnl { font-size: 12px; font-weight: 600; }
-    .positive { color: var(--green); }
-    .negative { color: var(--red); }
-    .neutral { color: var(--muted); }
-
-    .agent-body {
-      display: none; padding: 0 16px 16px;
-      border-top: 1px solid var(--border);
+    .strategy-pill {
+      font-size: 10px; padding: 2px 8px; border-radius: 10px;
+      background: var(--surface2); color: var(--muted); margin-left: 6px;
     }
-    .agent-card.expanded .agent-body { display: block; }
-
-    .agent-metrics {
-      display: grid; grid-template-columns: repeat(4, 1fr);
-      gap: 8px; margin: 12px 0;
+    .active-dot {
+      width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
     }
-    .metric {
-      background: var(--surface2); border-radius: 6px; padding: 8px 10px;
-    }
-    .metric-label { font-size: 10px; color: var(--muted); text-transform: uppercase; margin-bottom: 2px; }
-    .metric-value { font-size: 13px; font-weight: 600; }
+    .active-dot.on { background: var(--green); }
+    .active-dot.off { background: var(--dim); }
 
-    /* ── Mini Table ───────────────────────────── */
-    .mini-table { width: 100%; border-collapse: collapse; font-size: 12px; margin-top: 8px; }
-    .mini-table th {
-      text-align: left; padding: 6px 8px; color: var(--muted);
+    /* Equity section */
+    .equity-row {
+      display: flex; padding: 14px 16px; gap: 20px; border-bottom: 1px solid var(--border);
+    }
+    .equity-item { flex: 1; }
+    .equity-label { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+    .equity-value { font-size: 18px; font-weight: 700; }
+    .equity-sub { font-size: 12px; font-weight: 600; margin-top: 1px; }
+    .pos { color: var(--green); }
+    .neg { color: var(--red); }
+
+    /* Metrics bar */
+    .metrics-bar {
+      display: flex; padding: 8px 16px; gap: 16px; border-bottom: 1px solid var(--border);
+      font-size: 11px;
+    }
+    .metric-item { color: var(--muted); }
+    .metric-item strong { color: var(--text); font-weight: 600; }
+
+    /* Positions table */
+    .section-head {
+      font-size: 10px; font-weight: 700; color: var(--muted);
+      text-transform: uppercase; letter-spacing: 0.5px;
+      padding: 10px 16px 6px;
+    }
+    .section-head::before {
+      content: ''; display: inline-block; width: 3px; height: 10px;
+      border-radius: 2px; background: var(--green); margin-right: 6px; vertical-align: middle;
+    }
+
+    table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    th {
+      text-align: left; padding: 4px 16px; color: var(--dim);
       font-size: 10px; text-transform: uppercase; letter-spacing: 0.5px;
-      border-bottom: 1px solid var(--border);
+      border-bottom: 1px solid var(--border); font-weight: 600;
     }
-    .mini-table td {
-      padding: 6px 8px; border-bottom: 1px solid var(--border);
-    }
-    .mini-table tr:hover { background: rgba(255,255,255,0.02); }
-    .mini-table .empty-row { color: var(--dim); text-align: center; padding: 16px; }
+    td { padding: 5px 16px; border-bottom: 1px solid var(--border); }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: rgba(255,255,255,0.015); }
+    .empty { padding: 12px 16px; color: var(--dim); font-size: 11px; }
+    .sym { font-weight: 700; }
 
-    .sub-section-title {
-      font-size: 11px; font-weight: 600; color: var(--muted);
-      text-transform: uppercase; letter-spacing: 0.5px; margin-top: 12px;
-      display: flex; align-items: center; gap: 6px;
-    }
-    .sub-section-title::before {
-      content: ''; width: 3px; height: 12px; border-radius: 2px; background: var(--accent);
-    }
+    /* Trades */
+    .side-buy { color: var(--green); font-weight: 600; }
+    .side-sell { color: var(--red); font-weight: 600; }
 
-    /* ── Agent Action Bar ─────────────────────── */
-    .agent-actions { display: flex; gap: 6px; margin-top: 10px; }
-    .btn-sm {
-      padding: 4px 10px; font-size: 11px; border-radius: 4px;
-      border: 1px solid var(--border-light); background: var(--surface2);
-      color: var(--text); cursor: pointer; transition: all 0.15s;
-      font-family: inherit; font-weight: 600;
-    }
-    .btn-sm:hover { border-color: var(--accent); color: var(--accent); }
-    .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
-
-    /* ── Toast ────────────────────────────────── */
+    /* Toast */
     .toast {
       position: fixed; bottom: 20px; right: 20px;
       background: var(--surface); border: 1px solid var(--border-light);
-      border-radius: 8px; padding: 12px 16px; font-size: 12px;
-      max-width: 400px; box-shadow: 0 8px 24px rgba(0,0,0,0.4);
-      transform: translateY(100px); opacity: 0; transition: all 0.3s;
-      z-index: 1000;
+      border-radius: 8px; padding: 10px 14px; font-size: 12px;
+      max-width: 360px; box-shadow: 0 6px 20px rgba(0,0,0,0.5);
+      opacity: 0; transform: translateY(20px); transition: all 0.2s; z-index: 1000;
     }
-    .toast.show { transform: translateY(0); opacity: 1; }
-    .toast.success { border-color: rgba(38,208,124,0.3); }
-    .toast.error { border-color: rgba(240,68,68,0.3); }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.ok { border-color: rgba(38,208,124,0.3); }
+    .toast.err { border-color: rgba(240,68,68,0.3); }
 
-    /* ── Equity Sparkline ─────────────────────── */
-    .sparkline { width: 60px; height: 20px; display: inline-block; vertical-align: middle; }
-
-    /* ── Responsive ───────────────────────────── */
-    @media (max-width: 900px) {
-      .agents-grid { grid-template-columns: 1fr; }
-      .agent-metrics { grid-template-columns: repeat(2, 1fr); }
-    }
+    @media (max-width: 820px) { .grid { grid-template-columns: 1fr; } }
   </style>
 </head>
 <body>
@@ -191,287 +163,242 @@
 
   <!-- Header -->
   <div class="header">
-    <div class="header-left">
-      <div>
-        <div class="logo">DoomTrade</div>
-        <div class="header-sub">Agent Trading Platform</div>
-      </div>
+    <div>
+      <div class="logo">DoomTrade</div>
+      <div class="header-sub">Agent Trading Monitor</div>
     </div>
     <div class="header-right">
-      <span class="status-dot" id="status-dot"></span>
-      <span class="last-update" id="last-update">Connecting…</span>
-      <span class="mode-badge mode-sim" id="mode-badge">SIM</span>
+      <span class="dot" id="dot"></span>
+      <span class="timestamp" id="ts">Connecting…</span>
+      <span class="badge badge-sim" id="mode">SIM</span>
     </div>
   </div>
 
   <!-- Toolbar -->
   <div class="toolbar">
-    <button class="btn btn-primary" id="btn-a2a" onclick="runA2ACycle()">⚡ Run A2A Cycle</button>
-    <button class="btn" id="btn-eval-all" onclick="evaluateAllAgents()">▶ Evaluate All</button>
-    <button class="btn" onclick="fetchDashboard()">↻ Refresh</button>
-    <span style="flex:1"></span>
-    <span style="font-size:11px;color:var(--muted);align-self:center" id="health-info"></span>
+    <button class="btn" onclick="runA2A()" id="btn-a2a">⚡ Run A2A Cycle</button>
+    <button class="btn" onclick="evalAll()" id="btn-eval">▶ Evaluate All</button>
+    <div class="toolbar-spacer"></div>
+    <span class="toolbar-info" id="info"></span>
   </div>
 
-  <!-- Agent Cards Grid -->
-  <div class="agents-grid" id="agents-grid">
-    <div style="color:var(--muted);padding:40px;text-align:center;grid-column:1/-1">Loading agents…</div>
+  <!-- Agent grid -->
+  <div class="grid" id="grid">
+    <div style="color:var(--muted);padding:48px;text-align:center;grid-column:1/-1">Loading agents…</div>
   </div>
 
 </div>
 
-<!-- Toast -->
 <div class="toast" id="toast"></div>
 
 <script>
-const API = '';
-let dashboardData = {};
-let expandedAgent = null;
-
-// ── XSS-safe escape ──────────────────────────────
 function esc(v) {
   if (v == null) return '';
-  const d = document.createElement('div');
-  d.textContent = String(v);
-  return d.innerHTML;
+  const d = document.createElement('div'); d.textContent = String(v); return d.innerHTML;
 }
+function fmt$(v) { return '$' + Number(v||0).toFixed(2); }
+function fmtPct(v) { const n = Number(v||0); return (n>=0?'+':'') + n.toFixed(2) + '%'; }
+function pnlC(v) { return v >= 0 ? 'pos' : 'neg'; }
 
-// ── Toast ────────────────────────────────────────
-function toast(msg, type) {
-  const t = document.getElementById('toast');
-  t.textContent = msg;
-  t.className = 'toast show ' + (type || '');
-  setTimeout(() => t.classList.remove('show'), 3000);
-}
-
-// ── API helpers ──────────────────────────────────
-function authHeaders() {
+function hdrs() {
   const h = {};
   if (window.DOOMTRADE_API_KEY) h['Authorization'] = 'Bearer ' + window.DOOMTRADE_API_KEY;
   return h;
 }
-
-async function api(path, method) {
-  const resp = await fetch(API + path, { method: method || 'GET', headers: authHeaders() });
-  return resp;
+async function api(path) {
+  const r = await fetch(path, { headers: hdrs() });
+  if (!r.ok) throw new Error(`${r.status} ${r.statusText}`);
+  return r.json();
+}
+async function apiPost(path) {
+  const r = await fetch(path, { method: 'POST', headers: hdrs() });
+  return r.json();
 }
 
-async function apiJSON(path) {
-  const resp = await fetch(API + path, { headers: authHeaders() });
-  if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
-  return resp.json();
+function toast(msg, ok) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.className = 'toast show ' + (ok ? 'ok' : 'err');
+  setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// ── Number formatting ────────────────────────────
-function fmtMoney(v) {
-  const n = Number(v || 0);
-  return '$' + n.toFixed(2);
-}
-function fmtPct(v) {
-  const n = Number(v || 0);
-  const sign = n >= 0 ? '+' : '';
-  return sign + n.toFixed(2) + '%';
-}
-function pnlClass(v) { return v >= 0 ? 'positive' : 'negative'; }
-
-// ── Fetch all dashboard data ─────────────────────
-async function fetchDashboard() {
-  const dot = document.getElementById('status-dot');
+// ── Fetch & render ───────────────────────────────
+async function refresh() {
+  const dot = document.getElementById('dot');
   try {
-    const [health, agentsResp, leaderResp] = await Promise.all([
-      apiJSON('/api/health'),
-      apiJSON('/api/agents'),
-      apiJSON('/api/agents/leaderboard'),
+    const [health, agentsR, leaderR] = await Promise.all([
+      api('/api/health'),
+      api('/api/agents'),
+      api('/api/agents/leaderboard'),
     ]);
 
-    const agents = agentsResp.agents || [];
-    const leaderboard = leaderResp.leaderboard || [];
-    const rankMap = {};
-    leaderboard.forEach(e => rankMap[e.name] = e.rank);
+    const agents = agentsR.agents || [];
+    const ranks = {};
+    (leaderR.leaderboard || []).forEach(e => ranks[e.name] = e.rank);
 
     // Fetch per-agent details in parallel
-    const details = await Promise.all(
-      agents.map(async a => {
-        try {
-          const [port, pos, trd, ana] = await Promise.all([
-            apiJSON(`/api/agents/${a.id}/portfolio`),
-            apiJSON(`/api/agents/${a.id}/positions`),
-            apiJSON(`/api/agents/${a.id}/trades?limit=5`),
-            apiJSON(`/api/agents/${a.id}/analytics`),
-          ]);
-          return { agent: a, portfolio: port, positions: pos, trades: trd, analytics: ana, rank: rankMap[a.name] || '-' };
-        } catch (e) {
-          return { agent: a, portfolio: null, positions: null, trades: null, analytics: null, rank: rankMap[a.name] || '-' };
-        }
-      })
-    );
+    const details = await Promise.all(agents.map(async a => {
+      try {
+        const [port, pos, trd, ana] = await Promise.all([
+          api(`/api/agents/${a.id}/portfolio`),
+          api(`/api/agents/${a.id}/positions`),
+          api(`/api/agents/${a.id}/trades?limit=5`),
+          api(`/api/agents/${a.id}/analytics`),
+        ]);
+        return { a, port: port.portfolio||{}, pos: pos.positions||[], trd: trd.trades||[], ana: ana.analytics||{}, rank: ranks[a.name]||'-' };
+      } catch(e) {
+        return { a, port: {}, pos: [], trd: [], ana: {}, rank: ranks[a.name]||'-' };
+      }
+    }));
 
-    dashboardData = { health, agents: details, leaderboard };
-    renderDashboard();
+    render(details);
     dot.classList.remove('error');
-    document.getElementById('last-update').textContent = new Date().toLocaleTimeString();
-    document.getElementById('mode-badge').textContent = (health.mode || 'sim').toUpperCase();
-    document.getElementById('mode-badge').className = 'mode-badge ' + (health.mode === 'live' ? 'mode-live' : 'mode-sim');
-    document.getElementById('health-info').textContent = `uptime ${Math.round(health.uptime || 0)}s`;
-  } catch (e) {
-    console.error('Dashboard fetch error:', e);
+    document.getElementById('ts').textContent = new Date().toLocaleTimeString();
+    document.getElementById('mode').textContent = (health.mode||'sim').toUpperCase();
+    document.getElementById('info').textContent = `${agents.length} agents · uptime ${Math.round(health.uptime||0)}s`;
+  } catch(e) {
     dot.classList.add('error');
-    document.getElementById('last-update').textContent = 'Error: ' + e.message;
+    document.getElementById('ts').textContent = 'Error: ' + e.message;
   }
 }
 
-// ── Render ───────────────────────────────────────
-function renderDashboard() {
-  const grid = document.getElementById('agents-grid');
-  const agents = dashboardData.agents || [];
+function render(agents) {
+  const grid = document.getElementById('grid');
   if (!agents.length) {
-    grid.innerHTML = '<div style="color:var(--muted);padding:40px;text-align:center;grid-column:1/-1">No agents registered</div>';
+    grid.innerHTML = '<div style="color:var(--muted);padding:48px;text-align:center;grid-column:1/-1">No agents registered</div>';
     return;
   }
-  grid.innerHTML = agents.map(d => renderAgentCard(d)).join('');
+  grid.innerHTML = agents.map(renderCard).join('');
 }
 
-function renderAgentCard(d) {
-  const a = d.agent;
-  const port = d.portfolio?.portfolio || {};
-  const equity = port.equity || a.equity || a.cash || 0;
-  const cash = port.cash ?? a.cash ?? 0;
-  const initBal = a.initialBalance || a.starting_balance || 100;
-  const pnl = equity - initBal;
-  const retPct = ((pnl / initBal) * 100);
-  const positions = d.positions?.positions || [];
-  const trades = d.trades?.trades || [];
-  const analytics = d.analytics?.analytics || {};
+function renderCard(d) {
+  const a = d.a;
+  const equity = d.port.equity ?? a.equity ?? a.cash ?? 0;
+  const cash = d.port.cash ?? a.cash ?? 0;
+  const init = a.initialBalance || a.starting_balance || 100;
+  const pnl = equity - init;
+  const retPct = (pnl / init) * 100;
   const rank = d.rank;
-  const rankClass = rank <= 3 ? `rank-${rank}` : '';
-  const isActive = a.active;
-  const expanded = expandedAgent === a.id ? 'expanded' : '';
+  const rk = rank <= 3 ? `r${rank}` : '';
 
-  let html = `<div class="agent-card ${expanded}" id="card-${a.id}">`;
+  let h = `<div class="card">`;
 
-  // Header row
-  html += `<div class="agent-header" onclick="toggleAgent('${a.id}')">`;
-  html += `<div class="agent-name-row">`;
-  html += `<div class="agent-rank ${rankClass}">${esc(rank)}</div>`;
-  html += `<div>`;
-  html += `<div class="agent-name">${esc(a.name)}</div>`;
-  html += `<div class="agent-strategy">${esc(a.strategy || '—')}</div>`;
-  html += `</div></div>`;
-  html += `<div class="agent-stats">`;
-  html += `<div class="agent-stat"><div class="agent-stat-label">Equity</div><div class="agent-stat-value">${fmtMoney(equity)}</div></div>`;
-  html += `<div class="agent-stat"><div class="agent-stat-label">P&L</div><div class="agent-pnl ${pnlClass(pnl)}">${pnl >= 0 ? '+' : ''}${fmtMoney(pnl)}</div></div>`;
-  html += `<div class="agent-stat"><div class="agent-stat-label">Return</div><div class="agent-pnl ${pnlClass(retPct)}">${fmtPct(retPct)}</div></div>`;
-  html += `</div></div>`;
+  // Header: rank, name, strategy, active status
+  h += `<div class="card-head">
+    <div class="card-head-left">
+      <div class="rank ${rk}">${esc(rank)}</div>
+      <div>
+        <span class="agent-name">${esc(a.name)}</span>
+        <span class="strategy-pill">${esc(a.strategy || 'none')}</span>
+      </div>
+    </div>
+    <div class="card-head-left">
+      <span class="active-dot ${a.active ? 'on' : 'off'}"></span>
+      <span style="font-size:10px;color:var(--muted)">${a.active ? 'active' : 'inactive'}</span>
+    </div>
+  </div>`;
 
-  // Expanded body
-  html += `<div class="agent-body">`;
+  // Equity row: equity, P&L, return
+  h += `<div class="equity-row">
+    <div class="equity-item">
+      <div class="equity-label">Equity</div>
+      <div class="equity-value">${fmt$(equity)}</div>
+    </div>
+    <div class="equity-item">
+      <div class="equity-label">P&L</div>
+      <div class="equity-value ${pnlC(pnl)}">${pnl>=0?'+':''}${fmt$(pnl)}</div>
+      <div class="equity-sub ${pnlC(retPct)}">${fmtPct(retPct)}</div>
+    </div>
+    <div class="equity-item">
+      <div class="equity-label">Cash</div>
+      <div class="equity-value">${fmt$(cash)}</div>
+    </div>
+  </div>`;
 
-  // Metrics row
-  html += `<div class="agent-metrics">`;
-  html += `<div class="metric"><div class="metric-label">Cash</div><div class="metric-value">${fmtMoney(cash)}</div></div>`;
-  html += `<div class="metric"><div class="metric-label">Positions</div><div class="metric-value">${positions.length}</div></div>`;
-  html += `<div class="metric"><div class="metric-label">Win Rate</div><div class="metric-value">${(analytics.winRate || 0).toFixed(0)}%</div></div>`;
-  html += `<div class="metric"><div class="metric-label">Max DD</div><div class="metric-value">${(analytics.maxDrawdownPct || 0).toFixed(2)}%</div></div>`;
-  html += `</div>`;
+  // Metrics bar: positions, trades, win rate, drawdown
+  h += `<div class="metrics-bar">
+    <span class="metric-item"><strong>${d.pos.length}</strong> positions</span>
+    <span class="metric-item"><strong>${d.trd.length}</strong> recent trades</span>
+    <span class="metric-item">win rate <strong>${Number(d.ana.winRate||0).toFixed(0)}%</strong></span>
+    <span class="metric-item">max DD <strong>${Number(d.ana.maxDrawdownPct||0).toFixed(1)}%</strong></span>
+  </div>`;
 
-  // Positions table
-  html += `<div class="sub-section-title">Positions</div>`;
-  if (positions.length) {
-    html += `<table class="mini-table"><tr><th>Symbol</th><th>Qty</th><th>Entry</th><th>Current</th><th>P&L</th></tr>`;
-    positions.forEach(p => {
-      const upnl = p.unrealizedPnl || 0;
-      html += `<tr><td><strong>${esc(p.symbol)}</strong></td><td>${p.quantity.toFixed(6)}</td><td>$${Number(p.avgEntryPrice||0).toFixed(2)}</td><td>$${Number(p.currentPrice||p.avgEntryPrice||0).toFixed(2)}</td><td class="${pnlClass(upnl)}">${upnl>=0?'+':''}$${upnl.toFixed(2)}</td></tr>`;
+  // Positions
+  h += `<div class="section-head">Positions</div>`;
+  if (d.pos.length) {
+    h += `<table><tr><th>Symbol</th><th style="text-align:right">Qty</th><th style="text-align:right">Entry</th><th style="text-align:right">Current</th><th style="text-align:right">P&L</th></tr>`;
+    d.pos.forEach(p => {
+      const u = p.unrealizedPnl || 0;
+      const cur = p.currentPrice || p.avgEntryPrice || 0;
+      h += `<tr>
+        <td class="sym">${esc(p.symbol)}</td>
+        <td style="text-align:right">${Number(p.quantity||0).toFixed(6)}</td>
+        <td style="text-align:right">${fmt$(p.avgEntryPrice)}</td>
+        <td style="text-align:right">${fmt$(cur)}</td>
+        <td style="text-align:right" class="${pnlC(u)}">${u>=0?'+':''}${fmt$(u)}</td>
+      </tr>`;
     });
-    html += `</table>`;
+    h += `</table>`;
   } else {
-    html += `<div style="color:var(--dim);font-size:11px;padding:8px 0">No open positions</div>`;
+    h += `<div class="empty">No open positions</div>`;
   }
 
   // Recent trades
-  html += `<div class="sub-section-title">Recent Trades</div>`;
-  if (trades.length) {
-    html += `<table class="mini-table"><tr><th>Time</th><th>Symbol</th><th>Side</th><th>Qty</th><th>Fill</th><th>Fee</th></tr>`;
-    trades.forEach(t => {
-      const time = new Date(t.created_at || t.filled_at || Date.now()).toLocaleTimeString();
-      const sideClass = t.side === 'buy' ? 'positive' : 'negative';
-      html += `<tr><td>${esc(time)}</td><td><strong>${esc(t.symbol)}</strong></td><td class="${sideClass}">${esc(t.side).toUpperCase()}</td><td>${Number(t.quantity||0).toFixed(6)}</td><td>$${Number(t.fill_price||0).toFixed(2)}</td><td>$${Number(t.fee||0).toFixed(2)}</td></tr>`;
+  h += `<div class="section-head">Recent Trades</div>`;
+  if (d.trd.length) {
+    h += `<table><tr><th>Time</th><th>Symbol</th><th>Side</th><th style="text-align:right">Qty</th><th style="text-align:right">Fill</th><th style="text-align:right">Fee</th></tr>`;
+    d.trd.forEach(t => {
+      const tm = new Date(t.created_at || t.filled_at || Date.now()).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'});
+      const sc = t.side === 'buy' ? 'side-buy' : 'side-sell';
+      h += `<tr>
+        <td style="color:var(--muted)">${esc(tm)}</td>
+        <td class="sym">${esc(t.symbol)}</td>
+        <td class="${sc}">${esc(t.side).toUpperCase()}</td>
+        <td style="text-align:right">${Number(t.quantity||0).toFixed(6)}</td>
+        <td style="text-align:right">${fmt$(t.fill_price)}</td>
+        <td style="text-align:right;color:var(--muted)">${fmt$(t.fee)}</td>
+      </tr>`;
     });
-    html += `</table>`;
+    h += `</table>`;
   } else {
-    html += `<div style="color:var(--dim);font-size:11px;padding:8px 0">No trades yet</div>`;
+    h += `<div class="empty">No trades yet</div>`;
   }
 
-  // Action bar
-  html += `<div class="agent-actions">`;
-  html += `<button class="btn-sm" onclick="evaluateAgent('${a.id}','${esc(a.name)}')" id="btn-eval-${a.id}">▶ Evaluate</button>`;
-  html += `<span style="flex:1"></span>`;
-  html += `<span style="font-size:10px;color:var(--dim);align-self:center;${isActive?'':'opacity:0.5'}">${isActive?'● Active':'● Inactive'}</span>`;
-  html += `</div>`;
-
-  html += `</div></div>`;
-  return html;
+  h += `</div>`;
+  return h;
 }
 
-// ── Interactions ─────────────────────────────────
-function toggleAgent(id) {
-  expandedAgent = expandedAgent === id ? null : id;
-  renderDashboard();
-}
-
-async function evaluateAgent(id, name) {
-  const btn = document.getElementById('btn-eval-' + id);
-  if (btn) { btn.disabled = true; btn.textContent = 'Evaluating…'; }
+// ── Actions ──────────────────────────────────────
+async function evalAll() {
+  const btn = document.getElementById('btn-eval');
+  btn.disabled = true; btn.textContent = 'Evaluating…';
   try {
-    const resp = await fetch(`/api/agents/${id}/evaluate`, { method: 'POST', headers: authHeaders() });
-    const data = await resp.json();
-    if (resp.ok) {
-      toast(`${name}: ${data.signals} signals, ${data.trades} trades, P&L ${fmtMoney(data.pnlChange)}`, 'success');
-      await fetchDashboard();
-      expandedAgent = id;
-      renderDashboard();
-    } else {
-      toast(`${name}: ${data.error || 'Evaluation failed'}`, 'error');
+    const agents = (await api('/api/agents')).agents || [];
+    for (const a of agents) {
+      if (!a.active) continue;
+      const r = await apiPost(`/api/agents/${a.id}/evaluate`);
+      toast(`${a.name}: ${r.signals||0} signals, ${r.trades||0} trades`, !r.errors?.length);
     }
-  } catch (e) {
-    toast(`${name}: ${e.message}`, 'error');
-  }
-  if (btn) { btn.disabled = false; btn.textContent = '▶ Evaluate'; }
+    await refresh();
+  } catch(e) { toast(e.message, false); }
+  btn.disabled = false; btn.textContent = '▶ Evaluate All';
 }
 
-async function evaluateAllAgents() {
-  const btn = document.getElementById('btn-eval-all');
-  btn.classList.add('btn-loading');
-  const agents = dashboardData.agents || [];
-  for (const d of agents) {
-    if (d.agent.active) await evaluateAgent(d.agent.id, d.agent.name);
-  }
-  btn.classList.remove('btn-loading');
-}
-
-async function runA2ACycle() {
+async function runA2A() {
   const btn = document.getElementById('btn-a2a');
-  btn.classList.add('btn-loading');
-  btn.textContent = '⚡ Running A2A Cycle…';
+  btn.disabled = true; btn.textContent = '⚡ Running…';
   try {
-    const resp = await fetch('/api/agents/a2a-cycle', { method: 'POST', headers: authHeaders() });
-    const data = await resp.json();
-    if (resp.ok) {
-      const errs = data.errors?.length || 0;
-      toast(`A2A Cycle complete: ${data.signals?.length||0} signals, ${data.validations?.length||0} validations, ${errs} errors`, errs ? 'error' : 'success');
-      await fetchDashboard();
-    } else {
-      toast(`A2A Cycle failed: ${data.error}`, 'error');
-    }
-  } catch (e) {
-    toast(`A2A Cycle error: ${e.message}`, 'error');
-  }
-  btn.classList.remove('btn-loading');
-  btn.textContent = '⚡ Run A2A Cycle';
+    const r = await apiPost('/api/agents/a2a-cycle');
+    const errs = r.errors?.length || 0;
+    toast(`A2A: ${r.signals?.length||0} signals, ${r.validations?.length||0} validations, ${errs} errors`, errs === 0);
+    await refresh();
+  } catch(e) { toast(e.message, false); }
+  btn.disabled = false; btn.textContent = '⚡ Run A2A Cycle';
 }
 
 // ── Init ─────────────────────────────────────────
-fetchDashboard();
-setInterval(fetchDashboard, 10000);
+refresh();
+setInterval(refresh, 10000);
 </script>
 </body>
 </html>
