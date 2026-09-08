@@ -19,6 +19,8 @@ import { createPublicCryptoMarketData, createMarketDataService } from "./market/
 import { ResearchService } from "./research/research.js";
 import { ThemeRunner } from "./themes/theme-runner.js";
 import { CongressFollowerStrategy } from "./themes/strategies/congress-follower.js";
+import { MomentumRotationStrategy } from "./themes/strategies/momentum-rotation.js";
+import { AgentDrivenStrategy } from "./themes/strategies/agent-driven.js";
 import type { Executor } from "./executor/executor.js";
 import type { PriceProvider } from "./engine/trade-engine.js";
 

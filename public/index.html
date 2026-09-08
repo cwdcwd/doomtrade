@@ -158,6 +158,16 @@
     </div>
   </div>
 
+  <!-- Experimental Themes -->
+  <div class="section">
+    <div class="section-title">Experimental Themes</div>
+    <div class="card">
+      <div id="themes-container">
+        <div class="empty">Loading...</div>
+      </div>
+    </div>
+  </div>
+
   </div>
 
   <script type="module">
@@ -216,6 +226,22 @@
           renderDecisions(dec.decisions || []);
         document.getElementById('trades-container').innerHTML =
           renderTrades(trades.trades || []);
+
+        // Fetch themes
+        try {
+          const themesResp = await fetch('/api/themes');
+          if (themesResp.ok) {
+            const themesData = await themesResp.json();
+            document.getElementById('themes-container').innerHTML =
+              renderThemes(themesData.themes || []);
+          } else {
+            document.getElementById('themes-container').innerHTML =
+              '<div class="empty">Themes not available</div>';
+          }
+        } catch {
+          document.getElementById('themes-container').innerHTML =
+            '<div class="empty">Themes not available</div>';
+        }
 
         // Draw equity chart on canvas
         drawEquityChart(hist.history || []);
@@ -286,6 +312,28 @@
           + '<td>$' + Number(t.fillPrice || 0).toFixed(2) + '</td>'
           + '<td>$' + Number(t.fee || 0).toFixed(2) + '</td>'
           + '<td class="' + esc(statusClass) + '">' + esc(t.status) + '</td>'
+          + '</tr>';
+      }
+      html += '</table>';
+      return html;
+    }
+
+    function renderThemes(themes) {
+      if (!themes.length) return '<div class="empty">No themes configured</div>';
+      let html = '<table><tr><th>Name</th><th>Strategy</th><th>Mode</th><th>Capital</th><th>Status</th><th>Schedule</th></tr>';
+      for (const t of themes) {
+        const statusClass = t.enabled ? 'status-filled' : 'status-pending';
+        const status = t.enabled ? 'active' : 'disabled';
+        const schedule = t.schedule.type === 'cron' ? 'cron: ' + esc(t.schedule.expression || '')
+          : t.schedule.type === 'interval' ? (t.schedule.milliseconds / 1000) + 's'
+          : 'manual';
+        html += '<tr>'
+          + '<td><strong>' + esc(t.name) + '</strong></td>'
+          + '<td>' + esc(t.strategy) + '</td>'
+          + '<td>' + esc(t.mode).toUpperCase() + '</td>'
+          + '<td>$' + Number(t.allocatedCapital || 0).toFixed(2) + '</td>'
+          + '<td class="' + statusClass + '">' + status + '</td>'
+          + '<td>' + schedule + '</td>'
           + '</tr>';
       }
       html += '</table>';
