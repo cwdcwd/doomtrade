@@ -77,7 +77,7 @@ export type Database = DbClient;
  * SQLite uses `datetime('now')`; Postgres uses `NOW()`.
  * The `dialect` helper below converts these.
  */
-const MIGRATIONS: { version: number; name: string; sql: string }[] = [
+const MIGRATIONS: { version: number; name: string; sql?: string; postgresSql?: string; sqliteSql?: string }[] = [
   {
     version: 1,
     name: "initial_schema",
@@ -272,6 +272,27 @@ const MIGRATIONS: { version: number; name: string; sql: string }[] = [
       );
     `,
   },
+  {
+    version: 6,
+    name: "sim_sub_orders_realized_pnl",
+    // For Postgres: conditional add. For SQLite: the column may already exist
+    // in the CREATE TABLE (migration 5), so we catch the duplicate error.
+    // The migration runner records the version regardless after success.
+    postgresSql: `
+      DO $$
+      BEGIN
+        IF NOT EXISTS (
+          SELECT 1 FROM information_schema.columns
+          WHERE table_name = 'sim_sub_orders' AND column_name = 'realized_pnl'
+        ) THEN
+          ALTER TABLE sim_sub_orders ADD COLUMN realized_pnl REAL NOT NULL DEFAULT 0;
+        END IF;
+      END $$;
+    `,
+    sqliteSql: `
+      ALTER TABLE sim_sub_orders ADD COLUMN realized_pnl REAL NOT NULL DEFAULT 0;
+    `,
+  },
 ];
 
 /** Convert `{now}` placeholder to the dialect-appropriate expression. */
@@ -355,9 +376,15 @@ export async function runMigrations(db: DbClient): Promise<void> {
   for (const migration of MIGRATIONS) {
     if (appliedVersions.has(migration.version)) continue;
 
+    // Pick the right SQL for the backend: dialect-specific overrides, else generic sql
+    const rawSql = db.backend === "postgres"
+      ? (migration.postgresSql ?? migration.sql)
+      : (migration.sqliteSql ?? migration.sql);
+    if (!rawSql) continue; // No SQL for this backend — skip
+
     await db.run("BEGIN");
     try {
-      await db.exec(dialectSql(migration.sql, db.backend));
+      await db.exec(dialectSql(rawSql, db.backend));
       await db.run(
         "INSERT INTO _migrations (version, name) VALUES ($1, $2)",
         db.backend === "postgres"
@@ -367,6 +394,15 @@ export async function runMigrations(db: DbClient): Promise<void> {
       await db.run("COMMIT");
     } catch (err) {
       await db.run("ROLLBACK").catch(() => {});
+      // SQLite: tolerate "duplicate column name" — column already in CREATE TABLE
+      if (db.backend === "sqlite" && String(err).includes("duplicate column name")) {
+        // Record as applied so it doesn't retry
+        await db.run(
+          "INSERT INTO _migrations (version, name) VALUES ($1, $2)",
+          [migration.version, migration.name],
+        );
+        continue;
+      }
       throw err;
     }
   }
