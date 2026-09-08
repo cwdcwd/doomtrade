@@ -915,6 +915,56 @@ export function createApiRouter(state: AppState): Router {
     }
   });
 
+  // ── Direct trade execution on an agent's exchange ──────────────
+
+  router.post("/agents/:id/trade", async (req: Request, res: Response) => {
+    const agentId = String(req.params.id);
+
+    if (!state.agentManager) {
+      res.status(503).json({ error: "Agent manager not available" });
+      return;
+    }
+
+    const agent = await state.agentManager.getById(agentId);
+    if (!agent) {
+      res.status(404).json({ error: "Agent not found", agentId });
+      return;
+    }
+
+    const { symbol, side, quantity, orderType, limitPrice } = req.body as {
+      symbol?: string; side?: string; quantity?: number;
+      orderType?: string; limitPrice?: number;
+    };
+
+    if (!symbol || !side || !quantity || quantity <= 0) {
+      res.status(400).json({ error: "Missing required fields: symbol, side, quantity" });
+      return;
+    }
+
+    try {
+      const exchange = state.agentManager.getExchange(agentId);
+      const result = await exchange.placeOrder({
+        symbol,
+        side: side as "buy" | "sell",
+        quantity,
+        orderType: (orderType as "market" | "limit") ?? "market",
+        limitPrice,
+      });
+
+      res.json({
+        agentId,
+        agentName: agent.name,
+        status: result.status,
+        fillPrice: result.fillPrice,
+        fee: result.fee,
+        realizedPnl: result.realizedPnl,
+        error: result.error,
+      });
+    } catch (err) {
+      res.status(500).json({ error: "Trade failed", message: (err as Error).message });
+    }
+  });
+
   // ── A2A coordination: run a full multi-agent trading cycle ─────
 
   router.post("/agents/a2a-cycle", async (_req: Request, res: Response) => {
