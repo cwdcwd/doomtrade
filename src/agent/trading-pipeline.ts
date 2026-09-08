@@ -124,7 +124,7 @@ export class AgentTradingPipeline {
     // Strategies like momentum-rotation create a ThemeSubAccount using
     // config.id as the theme ID — it must exist in theme_subaccounts or
     // the strategy bails out with "no capital allocated".
-    await this.ensureSubAccount(agentId, equityBefore);
+    await this.ensureSubAccount(agentId, agentName, strategyType, equityBefore);
 
     // Build the theme config for this agent
     const config: ThemeConfig = {
@@ -240,11 +240,30 @@ export class AgentTradingPipeline {
 
   /**
    * Ensure the theme sub-account exists with the agent's current equity.
+   * The theme_subaccounts table has a FK on theme_id → themes(id), so we
+   * must also ensure a corresponding theme row exists for the agent.
    * Idempotent — if it already exists, the balance is updated to match
    * the agent's actual equity (syncing the sub-account to reality).
    */
-  private async ensureSubAccount(themeId: string, equity: number): Promise<void> {
+  private async ensureSubAccount(themeId: string, agentName: string, strategy: string, equity: number): Promise<void> {
     const db = this.config.db;
+
+    // Ensure a themes row exists (FK target for theme_subaccounts)
+    const themeCheckSql = convertPlaceholders(
+      "SELECT id FROM themes WHERE id = ?",
+      db.backend,
+    );
+    const themeExists = await execGet<{ id: string }>(db, themeCheckSql, [themeId]);
+    if (!themeExists) {
+      const themeInsertSql = convertPlaceholders(
+        `INSERT INTO themes (id, name, strategy, mode, schedule, max_allocation_pct, max_total_allocation_pct, max_positions, allocated_capital, params, enabled)
+         VALUES (?, ?, ?, 'sim', '{"type":"manual"}', 20, 80, 10, ?, '{}', 1)`,
+        db.backend,
+      );
+      await execRun(db, themeInsertSql, [themeId, agentName, strategy, equity]);
+    }
+
+    // Ensure the sub-account row exists
     const checkSql = convertPlaceholders(
       "SELECT theme_id FROM theme_subaccounts WHERE theme_id = ?",
       db.backend,
