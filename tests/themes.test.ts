@@ -399,6 +399,81 @@ describe("ThemeRunner", () => {
     expect(perf.openPositions).toBe(0);
     expect(perf.status).toBe("active");
   });
+
+  it("computes winRate from filled sell orders with realized_pnl", async () => {
+    const store = new ThemeStore(db);
+    const theme = await store.create({
+      name: "WinRate Test",
+      strategy: "test-mock",
+      schedule: { type: "manual" },
+      allocatedCapital: 100_000,
+    });
+
+    // Initialize sub-account with a mutable price provider
+    let currentPrice = 100;
+    const sub = new ThemeSubAccount(db, theme.id, {
+      feeRate: 0,
+      getCurrentPrice: () => currentPrice,
+    });
+    await sub.initialize(100_000);
+
+    // Buy at 100, sell at 120 — winning trade
+    await sub.placeOrder({ symbol: "WIN", side: "buy", quantity: 10, orderType: "market", clientOrderId: "w1" });
+    currentPrice = 120;
+    await sub.placeOrder({ symbol: "WIN", side: "sell", quantity: 10, orderType: "market", clientOrderId: "w2" });
+
+    // Buy at 100, sell at 80 — losing trade
+    currentPrice = 100;
+    await sub.placeOrder({ symbol: "LOSE", side: "buy", quantity: 10, orderType: "market", clientOrderId: "l1" });
+    currentPrice = 80;
+    await sub.placeOrder({ symbol: "LOSE", side: "sell", quantity: 10, orderType: "market", clientOrderId: "l2" });
+
+    const runner = new ThemeRunner(db, {
+      decisionStore: {} as any,
+      tradeEngine: {} as any,
+      portfolio: {} as any,
+      marketData: {} as any,
+    });
+
+    const perf = await runner.getPerformance(theme.id);
+    expect(perf.totalTrades).toBe(4);
+    expect(perf.filledTrades).toBe(4);
+    // 1 win out of 2 closed trades = 0.5
+    expect(perf.winRate).toBeCloseTo(0.5, 5);
+    expect(perf.openPositions).toBe(0);
+  });
+
+  it("winRate is 0 when no closed trades exist", async () => {
+    const store = new ThemeStore(db);
+    const theme = await store.create({
+      name: "No Sells Test",
+      strategy: "test-mock",
+      schedule: { type: "manual" },
+      allocatedCapital: 50_000,
+    });
+
+    const sub = new ThemeSubAccount(db, theme.id, {
+      feeRate: 0,
+      getCurrentPrice: () => 100,
+    });
+    await sub.initialize(50_000);
+
+    // Only buy — no sells, so no closed trades
+    await sub.placeOrder({ symbol: "AAPL", side: "buy", quantity: 10, orderType: "market", clientOrderId: "b1" });
+
+    const runner = new ThemeRunner(db, {
+      decisionStore: {} as any,
+      tradeEngine: {} as any,
+      portfolio: {} as any,
+      marketData: {} as any,
+    });
+
+    const perf = await runner.getPerformance(theme.id);
+    expect(perf.winRate).toBe(0);
+    expect(perf.totalTrades).toBe(1);
+    expect(perf.filledTrades).toBe(1);
+    expect(perf.openPositions).toBe(1);
+  });
 });
 
 // ── ManualListSignalSource ──────────────────────────────────────

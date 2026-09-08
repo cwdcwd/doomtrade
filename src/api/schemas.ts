@@ -11,7 +11,7 @@ import { z } from "zod";
 // ── Decision endpoints ─────────────────────────────────────────
 
 export const CreateDecisionBodySchema = z.object({
-  agent: z.enum(["doom", "kangbot"]),
+  agent: z.string().min(1),
   symbol: z.string().min(1).max(50),
   action: z.enum(["buy", "sell", "hold"]),
   quantity: z.number().positive(),
@@ -33,7 +33,7 @@ export const CreateDecisionBodySchema = z.object({
 export type CreateDecisionBody = z.infer<typeof CreateDecisionBodySchema>;
 
 export const ListDecisionsQuerySchema = z.object({
-  agent: z.enum(["doom", "kangbot"]).optional(),
+  agent: z.string().min(1).optional(),
   symbol: z.string().optional(),
   action: z.enum(["buy", "sell", "hold"]).optional(),
   mode: z.enum(["sim", "live"]).optional(),
@@ -142,3 +142,25 @@ export const ListThemesQuerySchema = z.object({
   enabled: z.enum(["true", "false"]).optional(),
 });
 export type ListThemesQuery = z.infer<typeof ListThemesQuerySchema>;
+
+// ── Agent endpoints ─────────────────────────────────────────────
+
+export const CreateAgentBodySchema = z.object({
+  name: z.string().min(1).max(100),
+  startingBalance: z.number().positive().optional(),
+  strategy: z.string().optional(),
+});
+export type CreateAgentBody = z.infer<typeof CreateAgentBodySchema>;
+
+export const UpdateAgentBodySchema = z.object({
+  strategy: z.string().optional(),
+  active: z.boolean().optional(),
+  startingBalance: z.number().positive().optional(),
+});
+export type UpdateAgentBody = z.infer<typeof UpdateAgentBodySchema>;
+
+export const ListAgentTradesQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(1000).default(100),
+  offset: z.coerce.number().int().min(0).default(0),
+});
+export type ListAgentTradesQuery = z.infer<typeof ListAgentTradesQuerySchema>;

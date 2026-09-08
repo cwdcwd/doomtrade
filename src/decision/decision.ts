@@ -8,8 +8,8 @@
 
 import { z } from "zod";
 
-export const AgentSchema = z.enum(["doom", "kangbot"]);
-export type Agent = z.infer<typeof AgentSchema>;
+export const AgentSchema = z.string().min(1);
+export type Agent = string;
 
 export const ActionSchema = z.enum(["buy", "sell", "hold"]);
 export type Action = z.infer<typeof ActionSchema>;

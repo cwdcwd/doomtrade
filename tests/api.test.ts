@@ -58,6 +58,7 @@ function createTestApp(db: Database, overrides?: Partial<AppState>) {
     config: mockConfig as Config,
     currentMode: "sim",
     modeChangedAt: Date.now(),
+    db,
     ...overrides,
   };
 
@@ -152,12 +153,12 @@ describe("API", () => {
       expect(resp.body.decision.marketContext.indicators.rsi).toBe(72);
     });
 
-    it("should reject invalid agent", async () => {
+    it("should accept any agent name (per-agent trading)", async () => {
       const { app } = createTestApp(db);
       const resp = await supertest(app)
         .post("/api/decisions")
         .send({
-          agent: "invalid",
+          agent: "ThanosBot",
           symbol: "AAPL",
           action: "buy",
           quantity: 100,
@@ -167,9 +168,8 @@ describe("API", () => {
           mode: "sim",
         });
 
-      expect(resp.status).toBe(400);
-      expect(resp.body.error).toBe("Validation failed");
-      expect(resp.body.details).toBeTruthy();
+      expect(resp.status).toBe(201);
+      expect(resp.body.decision.agent).toBe("ThanosBot");
     });
 
     it("should reject negative quantity", async () => {
@@ -599,6 +599,147 @@ describe("API", () => {
       const resp = await supertest(app).get("/api/trades/nonexistent");
 
       expect(resp.status).toBe(404);
+    });
+  });
+
+  // ── Trade analytics ─────────────────────────────────────────────
+
+  describe("GET /api/trades/analytics", () => {
+    it("should return analytics with zero trades initially", async () => {
+      const { app } = createTestApp(db);
+      const resp = await supertest(app).get("/api/trades/analytics");
+
+      expect(resp.status).toBe(200);
+      expect(resp.body.mode).toBe("sim");
+      expect(resp.body.analytics).toBeDefined();
+      expect(resp.body.analytics.totalTrades).toBe(0);
+      expect(resp.body.analytics.wins).toBe(0);
+      expect(resp.body.analytics.losses).toBe(0);
+      expect(resp.body.analytics.winRate).toBe(0);
+      expect(resp.body.analytics.sharpeRatio).toBe(0);
+      expect(resp.body.analytics.maxDrawdownPct).toBe(0);
+    });
+
+    it("should compute analytics after trades", async () => {
+      const { app, prices } = createTestApp(db);
+
+      // Buy AAPL at 185, then sell at a higher price
+      prices.set("AAPL", 185);
+      const buyResp = await supertest(app).post("/api/decisions").send({
+        agent: "doom",
+        symbol: "AAPL",
+        action: "buy",
+        quantity: 50,
+        priceAtDecision: 185,
+        rationale: "Bullish",
+        confidence: 8,
+        mode: "sim",
+      });
+      await supertest(app).post("/api/trade").send({
+        decisionId: buyResp.body.decision.id,
+      });
+
+      // Sell at 200 for a profit
+      prices.set("AAPL", 200);
+      const sellResp = await supertest(app).post("/api/decisions").send({
+        agent: "doom",
+        symbol: "AAPL",
+        action: "sell",
+        quantity: 50,
+        priceAtDecision: 200,
+        rationale: "Taking profit",
+        confidence: 7,
+        mode: "sim",
+      });
+      await supertest(app).post("/api/trade").send({
+        decisionId: sellResp.body.decision.id,
+      });
+
+      const resp = await supertest(app).get("/api/trades/analytics");
+
+      expect(resp.status).toBe(200);
+      expect(resp.body.analytics.totalTrades).toBe(2);
+      expect(resp.body.analytics.wins).toBe(1);
+      expect(resp.body.analytics.losses).toBe(0);
+      expect(resp.body.analytics.winRate).toBe(1);
+      expect(resp.body.analytics.totalPnl).toBeGreaterThan(0);
+      expect(resp.body.analytics.avgReturn).toBeGreaterThan(0);
+    });
+
+    it("should filter analytics by symbol", async () => {
+      const { app, prices } = createTestApp(db);
+
+      // Trade AAPL
+      prices.set("AAPL", 185);
+      const aaplResp = await supertest(app).post("/api/decisions").send({
+        agent: "doom",
+        symbol: "AAPL",
+        action: "buy",
+        quantity: 50,
+        priceAtDecision: 185,
+        rationale: "Bullish",
+        confidence: 8,
+        mode: "sim",
+      });
+      await supertest(app).post("/api/trade").send({
+        decisionId: aaplResp.body.decision.id,
+      });
+
+      // Trade MSFT
+      prices.set("MSFT", 400);
+      const msftResp = await supertest(app).post("/api/decisions").send({
+        agent: "doom",
+        symbol: "MSFT",
+        action: "buy",
+        quantity: 10,
+        priceAtDecision: 400,
+        rationale: "Bullish",
+        confidence: 8,
+        mode: "sim",
+      });
+      await supertest(app).post("/api/trade").send({
+        decisionId: msftResp.body.decision.id,
+      });
+
+      const resp = await supertest(app).get("/api/trades/analytics?symbol=AAPL");
+
+      expect(resp.status).toBe(200);
+      expect(resp.body.analytics.totalTrades).toBe(1);
+    });
+  });
+
+  // ── Date range filtering ────────────────────────────────────────
+
+  describe("GET /api/trades date range filtering", () => {
+    it("should filter trades by date range", async () => {
+      const { app } = createTestApp(db);
+
+      // Create a trade
+      const createResp = await supertest(app).post("/api/decisions").send({
+        agent: "doom",
+        symbol: "AAPL",
+        action: "buy",
+        quantity: 50,
+        priceAtDecision: 185,
+        rationale: "Bullish",
+        confidence: 8,
+        mode: "sim",
+      });
+      await supertest(app).post("/api/trade").send({
+        decisionId: createResp.body.decision.id,
+      });
+
+      // Filter with a start date in the future — should return no trades
+      const futureResp = await supertest(app).get("/api/trades?startDate=2099-01-01");
+      expect(futureResp.body.trades).toHaveLength(0);
+
+      // Filter with a start date in the past — should return the trade
+      const pastResp = await supertest(app).get("/api/trades?startDate=2020-01-01");
+      expect(pastResp.body.trades).toHaveLength(1);
+
+      // Filter with end date in the past — should return no trades
+      const pastEndResp = await supertest(app).get("/api/trades?endDate=2020-01-01");
+      expect(pastEndResp.body.trades).toHaveLength(0);
     });
   });
 

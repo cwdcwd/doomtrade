@@ -195,11 +195,15 @@ describe("MomentumScreenSignalSource", () => {
     expect(aaplSignal!.action).toBe("buy");
     expect(aaplSignal!.priceAtSignal).toBeGreaterThan(0);
     expect(aaplSignal!.metadata).toHaveProperty("indicator", "sma-crossover");
+    // Verify reason string format (fixes #40 — no redundant ternary)
+    expect(aaplSignal!.reason).toContain("bullish signal");
 
     // TSLA should have a sell signal
     const tslaSignal = signals.find((s) => s.symbol === "TSLA");
     expect(tslaSignal).toBeDefined();
     expect(tslaSignal!.action).toBe("sell");
+    // Verify reason string format
+    expect(tslaSignal!.reason).toContain("bearish signal");
 
     // CASH should be omitted (neutral)
     const cashSignal = signals.find((s) => s.symbol === "CASH");

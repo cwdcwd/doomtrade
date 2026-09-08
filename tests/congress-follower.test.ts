@@ -334,6 +334,80 @@ describe("CongressFollowerStrategy", () => {
     vi.restoreAllMocks();
   });
 
+  it("correctly calculates quantity as Math.floor(maxAllocation / price)", async () => {
+    const store = new ThemeStore(db);
+    const theme = await store.create({
+      name: "Qty Calc Test",
+      strategy: "congress-follower",
+      schedule: { type: "manual" },
+      params: { politician: "Pelosi" },
+      allocatedCapital: 50_000,
+      maxAllocationPct: 10,  // 10% of 50,000 = 5,000 max allocation
+    });
+
+    const sub = new ThemeSubAccount(db, theme.id, {
+      feeRate: 0,
+      getCurrentPrice: (sym) => sym === "NVDA" ? 120 : null,
+    });
+    await sub.initialize(50_000);
+
+    // Mock Bargo API returning a trade with price 120
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        trades: [
+          {
+            member: "Nancy Pelosi",
+            member_slug: "nancy-pelosi",
+            chamber: "house",
+            state: "CA",
+            ticker: "NVDA",
+            asset: "NVIDIA",
+            type: "purchase",
+            amount_range: "$1,001 - $15,000",
+            transaction_date: "2026-09-10",
+            disclosure_date: "2026-09-15",
+            est_price: 120.00,
+            recent_price: 180.00,
+            perf_pct: 50,
+            outcome: "winner",
+            filing_portal: "https://disclosures-clerk.house.gov",
+          },
+        ],
+        page: 0,
+        limit: 100,
+        count: 1,
+      }),
+    } as Response);
+
+    const strategy = new CongressFollowerStrategy();
+    const config = await store.getById(theme.id);
+
+    const ctx: ThemeContext = {
+      db,
+      marketData: { getQuote: async () => ({ price: 120 }) } as any,
+      decisionStore: {} as any,
+      tradeEngine: {} as any,
+      portfolio: {} as any,
+      themeId: theme.id,
+      getEquity: async () => {
+        const bal = await sub.getBalance();
+        return bal.equity;
+      },
+      getPositions: async () => sub.getPositions(),
+      getQuote: async () => 120,
+    };
+
+    const result = await strategy.evaluate(ctx, config!);
+
+    expect(result.trades).toHaveLength(1);
+    // maxAllocation = 50000 * 0.10 = 5000, price = 120, qty = floor(5000/120) = 41
+    expect(result.trades[0].quantity).toBe(Math.floor(5000 / 120));
+    expect(result.trades[0].quantity).toBe(41);
+
+    vi.restoreAllMocks();
+  });
+
   it("deduplicates previously processed signals", async () => {
     const store = new ThemeStore(db);
     const theme = await store.create({

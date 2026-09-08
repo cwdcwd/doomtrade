@@ -102,10 +102,9 @@ describe("DecisionStore", () => {
       expect(decision.marketContext).toBeUndefined();
     });
 
-    it("should reject invalid agent", async () => {
-      await expect(
-        store.create({ ...sampleInput, agent: "invalid" as never }),
-      ).rejects.toThrow();
+    it("should accept any agent name (per-agent trading)", async () => {
+      const decision = await store.create({ ...sampleInput, agent: "ThanosBot" as never });
+      expect(decision.agent).toBe("ThanosBot");
     });
 
     it("should reject invalid action", async () => {

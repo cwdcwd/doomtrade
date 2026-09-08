@@ -25,6 +25,7 @@ import { CongressFollowerStrategy } from "./themes/strategies/congress-follower.
 import { MomentumRotationStrategy } from "./themes/strategies/momentum-rotation.js";
 import { AgentDrivenStrategy } from "./themes/strategies/agent-driven.js";
 import { AgentManager } from "./agent/agent-manager.js";
+import { AgentTradeEngine } from "./engine/agent-trade-engine.js";
 import type { Executor } from "./executor/executor.js";
 import type { PriceProvider } from "./engine/trade-engine.js";
 
@@ -148,6 +149,24 @@ async function main() {
   themeRunner.registerStrategy(new MomentumRotationStrategy());
   themeRunner.registerStrategy(new AgentDrivenStrategy());
 
+  // Agent trading pipeline — autonomous per-agent strategy execution
+  const { AgentTradingPipeline } = await import("./agent/trading-pipeline.js");
+  const agentStrategies = new Map<string, import("./themes/strategy.js").ThemeStrategy>();
+  agentStrategies.set("momentum-rotation", new MomentumRotationStrategy());
+  agentStrategies.set("congress-follower", new CongressFollowerStrategy());
+  agentStrategies.set("agent-driven", new AgentDrivenStrategy());
+
+  const agentPipeline = new AgentTradingPipeline({
+    agentManager,
+    marketData,
+    db,
+    strategies: agentStrategies,
+    defaultUniverse: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT", "DOGE/USDT", "AVAX/USDT"],
+  });
+
+  // Agent trade engine — per-agent risk checks and execution
+  const agentTradeEngine = new AgentTradeEngine(db, agentManager, config, priceProvider);
+
   // Start all enabled themes on boot
   await themeRunner.startAll();
 
@@ -164,6 +183,7 @@ async function main() {
     themeRunner,
     db,
     agentManager,
+    agentTradeEngine,
   };
 
   const app = express();
