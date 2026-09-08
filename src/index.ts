@@ -130,7 +130,7 @@ async function main() {
   await agentManager.seedDefaults([
     { name: "Doom", startingBalance: config.simStartingBalance, strategy: "momentum-rotation" },
     { name: "Kangbot", startingBalance: config.simStartingBalance, strategy: "congress-follower" },
-    { name: "ThanosBot", startingBalance: config.simStartingBalance, strategy: "agent-driven" },
+    { name: "ThanosBot", startingBalance: config.simStartingBalance, strategy: "momentum-rotation" },
   ]);
 
   // Theme runner for experimental strategies
@@ -162,6 +162,8 @@ async function main() {
     db,
     strategies: agentStrategies,
     defaultUniverse: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT", "DOGE/USDT", "AVAX/USDT"],
+    a2aEndpoint: config.a2aEndpoint || undefined,
+    a2aToken: config.a2aToken || undefined,
   });
 
   // Agent trade engine — per-agent risk checks and execution

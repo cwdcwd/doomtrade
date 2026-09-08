@@ -36,6 +36,10 @@ const ConfigSchema = z.object({
   // Redis (for BullMQ theme scheduling)
   redisUrl: z.string().default(""),
 
+  // A2A endpoint for agent-driven strategy (LiteLLM gateway)
+  a2aEndpoint: z.string().default(""),
+  a2aToken: z.string().default(""),
+
   // API security
   apiKey: z.string().default(""),
 });
@@ -65,6 +69,8 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     simStartingBalance: env.SIM_STARTING_BALANCE ? parseFloat(env.SIM_STARTING_BALANCE) : undefined,
     simFeePct: env.SIM_FEE_PCT ? parseFloat(env.SIM_FEE_PCT) : undefined,
     redisUrl: env.REDIS_URL,
+    a2aEndpoint: env.A2A_ENDPOINT ?? "",
+    a2aToken: env.A2A_TOKEN ?? env.LITELLM_GATEWAY_API_KEY ?? "",
     apiKey: env.DOOMTRADE_API_KEY,
   });
 }
