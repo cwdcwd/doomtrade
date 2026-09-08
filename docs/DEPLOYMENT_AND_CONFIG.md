@@ -248,7 +248,7 @@ All configuration is loaded from environment variables and validated with Zod at
 
 ### Key Configuration Notes
 
-- **Binance geo-blocked**: CCXT_EXCHANGE defaults to "binance" but Binance is geo-blocked from Railway US servers (HTTP 451). Use `"kraken"` for production.
+> **Warning: Binance geo-blocked from Railway US servers (HTTP 451).** Use `CCXT_EXCHANGE=kraken` for production deployment. The default is "binance" which only works from non-US IPs.
 - **Postgres on Railway**: Set `DATABASE_URL` to the Railway Postgres connection string. Postgres data persists across redeploys; SQLite data does not (unless volume mounted).
 - **API auth**: If `DOOMTRADE_API_KEY` is empty, all endpoints are open (local dev only). Set it for production.
 

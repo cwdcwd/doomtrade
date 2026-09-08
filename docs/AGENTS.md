@@ -346,4 +346,4 @@ stdDev = sqrt(variance(returns))
 sharpeRatio = (avgReturn / stdDev) * sqrt(252)
 ```
 
-Annualized using 252 trading days (standard for stock markets). For crypto (24/7 markets), the annualization factor could be `sqrt(365)`, but the current implementation uses 252 for consistency.
+Annualized using 252 trading days (standard for stock markets). The current implementation uses 252 for both stock and crypto, even though crypto markets run 24/7 (where `sqrt(365)` would be more accurate).

@@ -326,7 +326,7 @@ curl -X POST http://localhost:3000/api/themes \
 Fetches congressional trade disclosures from Bargo API.
 
 - **Config**: `member`, `ticker`, `chamber`, `type`, `limit`, `apiKey`
-- **Free tier**: 30 requests/day, 100 rows per request, no key required
+- **Free tier**: 30 requests/day, 100 rows per request, no key required. Rate limit is per IP, which matters for shared hosting environments.
 - **Mapping**: purchase → buy, sale/sale_full/sale_partial → sell, exchange → hold (skip)
 
 ### MomentumScreenSignalSource (`src/themes/sources/momentum-screen.ts`)

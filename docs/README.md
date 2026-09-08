@@ -72,7 +72,7 @@ DoomTrade
 | --- | --- | --- |
 | Doom | momentum-rotation | $100,000 |
 | Kangbot | congress-follower | $100,000 |
-| ThanosBot | agent-driven | $100,000 |
+| ThanosBot | agent-driven | $100,000 | Delegates to AI agent via A2A for signals |
 
 ### CLI Tools
 

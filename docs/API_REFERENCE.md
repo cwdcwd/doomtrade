@@ -7,11 +7,36 @@
 If `DOOMTRADE_API_KEY` environment variable is set, all requests (except `/api/health`) require authentication via one of:
 
 ```
-Authorization: Bearer <API_KEY>
-X-API-Key: <API_KEY>
+Authorization: Bearer YOUR_API_KEY
+X-API-Key: YOUR_API_KEY
 ```
 
 If the env var is not set, authentication is disabled (local dev mode).
+
+---
+
+## Error Responses
+
+All error responses follow a consistent JSON format:
+
+```json
+{
+  "error": "Error type",
+  "message": "Human-readable detail",
+  "id": "optional resource id",
+  "details": []
+}
+```
+
+| Status | When | Example |
+| --- | --- | --- |
+| 400 | Zod validation failed | `{"error": "Validation failed", "details": [...]}` |
+| 401 | Missing or invalid API key | `{"error": "Unauthorized", "message": "..."}` |
+| 404 | Resource not found | `{"error": "Decision not found", "id": "uuid"}` |
+| 422 | Risk check failed (trade execution) | `{"error": "...", "riskPassed": false, ...}` |
+| 429 | Rate limited (mode cooldown) | `{"error": "Mode change cooldown active. 45s remaining."}` |
+| 500 | Internal server error | `{"error": "Failed to create decision", "message": "..."}` |
+| 503 | Service unavailable (market data) | `{"error": "Market data service not available"}` |
 
 ---
 
