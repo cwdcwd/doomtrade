@@ -68,6 +68,38 @@ export interface ExecuteResult {
   riskPassed: boolean;
 }
 
+export interface TradeAnalytics {
+  tradeCount: number;
+  filledCount: number;
+  pendingCount: number;
+  rejectedCount: number;
+  cancelledCount: number;
+  winLoss: {
+    wins: number;
+    losses: number;
+    breakeven: number;
+    totalClosed: number;
+    winRate: number;
+  };
+  pnl: {
+    totalRealized: number;
+    totalFees: number;
+    netPnl: number;
+    grossProfit: number;
+    grossLoss: number;
+    avgWin: number;
+    avgLoss: number;
+    profitFactor: number;
+  };
+  equity: {
+    startEquity: number;
+    endEquity: number;
+    maxEquity: number;
+    minEquity: number;
+    drawdownPct: number;
+  };
+}
+
 // ── Helpers ─────────────────────────────────────────────────────
 
 interface TradeRow {
@@ -423,7 +455,7 @@ export class TradeEngine {
   }
 
   /**
-   * List trades, optionally filtered by symbol, status, or decision ID.
+   * List trades, optionally filtered by symbol, status, decision ID, or date range.
    * Returns most recent first.
    */
   async listTrades(filter?: {
@@ -492,5 +524,181 @@ export class TradeEngine {
    */
   async getTradesForDecision(decisionId: string): Promise<TradeRecord[]> {
     return this.listTrades({ decisionId, limit: 1000 });
+  }
+
+  // ── Performance analytics ────────────────────────────────────
+
+  /**
+   * Compute aggregated performance analytics from the trades table
+   * and portfolio_history equity curve.
+   *
+   * Optional filters: symbol, startDate, endDate (applied to trades).
+   */
+  async getAnalytics(filter?: {
+    symbol?: string;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<TradeAnalytics> {
+    // Build WHERE clause for trade filters
+    const conditions: string[] = [];
+    const params: (string | number)[] = [];
+
+    if (filter?.symbol) {
+      conditions.push("symbol = ?");
+      params.push(filter.symbol);
+    }
+    if (filter?.startDate) {
+      conditions.push("timestamp >= ?");
+      params.push(filter.startDate);
+    }
+    if (filter?.endDate) {
+      conditions.push("timestamp <= ?");
+      params.push(filter.endDate);
+    }
+
+    const whereClause = conditions.length > 0
+      ? " WHERE " + conditions.join(" AND ")
+      : "";
+
+    // ── Trade counts by status ──
+    const countRows = await execAll<{ status: string; count: number }>(
+      this.db,
+      `SELECT status, COUNT(*) as count FROM trades${whereClause} GROUP BY status`,
+      params,
+    );
+
+    let tradeCount = 0;
+    let filledCount = 0;
+    let pendingCount = 0;
+    let rejectedCount = 0;
+    let cancelledCount = 0;
+
+    for (const row of countRows) {
+      tradeCount += row.count;
+      switch (row.status) {
+        case "filled": filledCount = row.count; break;
+        case "pending": pendingCount = row.count; break;
+        case "rejected": rejectedCount = row.count; break;
+        case "cancelled": cancelledCount = row.count; break;
+      }
+    }
+
+    // ── Win/Loss and P&L from filled trades ──
+    const filledConditions = [...conditions];
+    const filledParams = [...params];
+    filledConditions.push("status = 'filled'");
+    const filledWhere = " WHERE " + filledConditions.join(" AND ");
+
+    const pnlRows = await execAll<{
+      realized_pnl: number;
+      fee: number;
+    }>(this.db, `SELECT realized_pnl, fee FROM trades${filledWhere}`, filledParams);
+
+    let wins = 0;
+    let losses = 0;
+    let breakeven = 0;
+    let totalRealized = 0;
+    let totalFees = 0;
+    let grossProfit = 0;
+    let grossLoss = 0;
+
+    for (const row of pnlRows) {
+      const pnl = row.realized_pnl;
+      totalRealized += pnl;
+      totalFees += row.fee;
+
+      if (pnl > 0) {
+        wins++;
+        grossProfit += pnl;
+      } else if (pnl < 0) {
+        losses++;
+        grossLoss += pnl;
+      } else {
+        breakeven++;
+      }
+    }
+
+    const totalClosed = wins + losses + breakeven;
+    const winRate = totalClosed > 0 ? (wins / totalClosed) * 100 : 0;
+    const netPnl = totalRealized - totalFees;
+    const avgWin = wins > 0 ? grossProfit / wins : 0;
+    const avgLoss = losses > 0 ? grossLoss / losses : 0;
+    const profitFactor = grossLoss !== 0
+      ? grossProfit / Math.abs(grossLoss)
+      : grossProfit > 0
+        ? Infinity
+        : 0;
+
+    // ── Equity curve from portfolio_history ──
+    const equityConditions: string[] = [];
+    const equityParams: (string | number)[] = [];
+
+    if (filter?.startDate) {
+      equityConditions.push("timestamp >= ?");
+      equityParams.push(filter.startDate);
+    }
+    if (filter?.endDate) {
+      equityConditions.push("timestamp <= ?");
+      equityParams.push(filter.endDate);
+    }
+
+    const equityWhere = equityConditions.length > 0
+      ? " WHERE " + equityConditions.join(" AND ")
+      : "";
+
+    const equityRows = await execAll<{ equity: number }>(
+      this.db,
+      `SELECT equity FROM portfolio_history${equityWhere} ORDER BY timestamp ASC`,
+      equityParams,
+    );
+
+    let startEquity = 0;
+    let endEquity = 0;
+    let maxEquity = 0;
+    let minEquity = 0;
+    let drawdownPct = 0;
+
+    if (equityRows.length > 0) {
+      startEquity = equityRows[0].equity;
+      endEquity = equityRows[equityRows.length - 1].equity;
+      maxEquity = Math.max(...equityRows.map((r) => r.equity));
+      minEquity = Math.min(...equityRows.map((r) => r.equity));
+
+      if (maxEquity > 0) {
+        drawdownPct = ((maxEquity - minEquity) / maxEquity) * 100;
+      }
+    }
+
+    return {
+      tradeCount,
+      filledCount,
+      pendingCount,
+      rejectedCount,
+      cancelledCount,
+      winLoss: {
+        wins,
+        losses,
+        breakeven,
+        totalClosed,
+        winRate,
+      },
+      pnl: {
+        totalRealized,
+        totalFees,
+        netPnl,
+        grossProfit,
+        grossLoss,
+        avgWin,
+        avgLoss,
+        profitFactor,
+      },
+      equity: {
+        startEquity,
+        endEquity,
+        maxEquity,
+        minEquity,
+        drawdownPct,
+      },
+    };
   }
 }
