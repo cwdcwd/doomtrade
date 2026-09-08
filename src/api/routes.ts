@@ -242,11 +242,9 @@ export function createApiRouter(state: AppState): Router {
     const { execGet, execAll, convertPlaceholders } = await import("../db/database.js");
 
     try {
-      // Aggregate stats from filled trades
+      // Aggregate stats from filled trades (all trades)
       const agg = await execGet<{
         total: number;
-        wins: number;
-        losses: number;
         total_pnl: number;
         avg_pnl: number;
       }>(
@@ -254,8 +252,6 @@ export function createApiRouter(state: AppState): Router {
         convertPlaceholders(
           `SELECT
              COUNT(*) as total,
-             COUNT(CASE WHEN realized_pnl > 0 THEN 1 END) as wins,
-             COUNT(CASE WHEN realized_pnl < 0 THEN 1 END) as losses,
              COALESCE(SUM(realized_pnl), 0) as total_pnl,
              COALESCE(AVG(realized_pnl), 0) as avg_pnl
            FROM trades WHERE ${where}`,
@@ -264,21 +260,39 @@ export function createApiRouter(state: AppState): Router {
         params,
       );
 
+      // Win/loss stats from sell trades only (closed positions)
+      const sellConditions = [...conditions, "side = 'sell'"];
+      const sellParams = [...params];
+      const sellWhere = sellConditions.join(" AND ");
+
+      const winLossAgg = await execGet<{ wins: number; losses: number }>(
+        db,
+        convertPlaceholders(
+          `SELECT
+             COUNT(CASE WHEN realized_pnl > 0 THEN 1 END) as wins,
+             COUNT(CASE WHEN realized_pnl < 0 THEN 1 END) as losses
+           FROM trades WHERE ${sellWhere}`,
+          db.backend,
+        ),
+        sellParams,
+      );
+
       const total = agg?.total ?? 0;
-      const wins = agg?.wins ?? 0;
-      const losses = agg?.losses ?? 0;
+      const wins = winLossAgg?.wins ?? 0;
+      const losses = winLossAgg?.losses ?? 0;
       const totalPnl = agg?.total_pnl ?? 0;
       const avgPnl = agg?.avg_pnl ?? 0;
-      const winRate = total > 0 ? wins / total : 0;
+      const closedTrades = wins + losses;
+      const winRate = closedTrades > 0 ? wins / closedTrades : 0;
 
-      // Per-trade returns for Sharpe ratio calculation
+      // Per-trade returns for Sharpe ratio calculation (sell trades only)
       const tradeRows = await execAll<{ realized_pnl: number }>(
         db,
         convertPlaceholders(
-          `SELECT realized_pnl FROM trades WHERE ${where} ORDER BY timestamp ASC`,
+          `SELECT realized_pnl FROM trades WHERE ${sellWhere} ORDER BY timestamp ASC`,
           db.backend,
         ),
-        params,
+        sellParams,
       );
 
       const returns = tradeRows.map((r) => r.realized_pnl);
@@ -710,6 +724,54 @@ export function createApiRouter(state: AppState): Router {
     } catch (err) {
       const status = (err as Error).message.includes("not found") ? 404 : 500;
       res.status(status).json({ error: (err as Error).message });
+    }
+  });
+
+  // ── Admin: reset sim state ──────────────────────────────────────
+
+  router.post("/admin/reset", async (req: Request, res: Response) => {
+    const db = state.db;
+    if (!db) {
+      res.status(503).json({ error: "Database not available" });
+      return;
+    }
+    const { confirm } = req.body as { confirm?: string };
+    if (confirm !== "WIPE_ALL_DATA") {
+      res.status(400).json({
+        error: "Confirmation required",
+        message: "Pass { confirm: 'WIPE_ALL_DATA' } to reset all sim data",
+      });
+      return;
+    }
+
+    try {
+      // Wipe all trade data tables (order matters for FK constraints)
+      const tables = [
+        "sim_sub_orders",
+        "sim_sub_positions",
+        "theme_evaluations",
+        "theme_signals",
+        "theme_subaccounts",
+        "themes",
+        "trades",
+        "decisions",
+        "portfolio_history",
+        "sim_positions",
+        "sim_state",
+      ];
+      for (const table of tables) {
+        await db.exec(`DELETE FROM ${table}`);
+      }
+      res.json({
+        mode: state.currentMode,
+        reset: true,
+        message: "All sim data wiped. Redeploy to reinitialize with new SIM_STARTING_BALANCE.",
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: "Reset failed",
+        message: (err as Error).message,
+      });
     }
   });
 
