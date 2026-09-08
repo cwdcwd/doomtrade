@@ -245,13 +245,19 @@ function toast(msg, type) {
 }
 
 // ── API helpers ──────────────────────────────────
+function authHeaders() {
+  const h = {};
+  if (window.DOOMTRADE_API_KEY) h['Authorization'] = 'Bearer ' + window.DOOMTRADE_API_KEY;
+  return h;
+}
+
 async function api(path, method) {
-  const resp = await fetch(API + path, { method: method || 'GET' });
+  const resp = await fetch(API + path, { method: method || 'GET', headers: authHeaders() });
   return resp;
 }
 
 async function apiJSON(path) {
-  const resp = await fetch(API + path);
+  const resp = await fetch(API + path, { headers: authHeaders() });
   if (!resp.ok) throw new Error(`${resp.status} ${resp.statusText}`);
   return resp.json();
 }
@@ -416,7 +422,7 @@ async function evaluateAgent(id, name) {
   const btn = document.getElementById('btn-eval-' + id);
   if (btn) { btn.disabled = true; btn.textContent = 'Evaluating…'; }
   try {
-    const resp = await fetch(`/api/agents/${id}/evaluate`, { method: 'POST' });
+    const resp = await fetch(`/api/agents/${id}/evaluate`, { method: 'POST', headers: authHeaders() });
     const data = await resp.json();
     if (resp.ok) {
       toast(`${name}: ${data.signals} signals, ${data.trades} trades, P&L ${fmtMoney(data.pnlChange)}`, 'success');
@@ -447,7 +453,7 @@ async function runA2ACycle() {
   btn.classList.add('btn-loading');
   btn.textContent = '⚡ Running A2A Cycle…';
   try {
-    const resp = await fetch('/api/agents/a2a-cycle', { method: 'POST' });
+    const resp = await fetch('/api/agents/a2a-cycle', { method: 'POST', headers: authHeaders() });
     const data = await resp.json();
     if (resp.ok) {
       const errs = data.errors?.length || 0;

@@ -212,7 +212,8 @@ async function main() {
   });
 
   // Dashboard route — injects API key into the page so the dashboard's
-  // fetch calls authenticate when DOOMTRADE_API_KEY is set.
+  // Serve dashboard with API key injected for browser-side auth.
+  // The dashboard uses authFetch() which reads window.DOOMTRADE_API_KEY.
   // This MUST come before express.static so we intercept the root path.
   app.get("/", (req, res) => {
     const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -221,33 +222,8 @@ async function main() {
     if (config.apiKey) {
       // Inject API key as a global variable before the dashboard script runs
       html = html.replace(
-        "<script type=\"module\">",
-        `<script>window.DOOMTRADE_API_KEY = ${JSON.stringify(config.apiKey)};</script>\n    <script type="module">`,
-      );
-      // Add Authorization header to all fetch calls
-      html = html.replace(
-        "fetch('/api/portfolio'),",
-        "fetch('/api/portfolio', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
-      );
-      html = html.replace(
-        "fetch('/api/positions'),",
-        "fetch('/api/positions', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
-      );
-      html = html.replace(
-        "fetch('/api/decisions?limit=10'),",
-        "fetch('/api/decisions?limit=10', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
-      );
-      html = html.replace(
-        "fetch('/api/trades?limit=10'),",
-        "fetch('/api/trades?limit=10', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
-      );
-      html = html.replace(
-        "fetch('/api/portfolio/history'),",
-        "fetch('/api/portfolio/history', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } }),",
-      );
-      html = html.replace(
-        "const themesResp = await fetch('/api/themes');",
-        "const themesResp = await fetch('/api/themes', { headers: { 'Authorization': 'Bearer ' + window.DOOMTRADE_API_KEY } });",
+        "<script>",
+        `<script>window.DOOMTRADE_API_KEY = ${JSON.stringify(config.apiKey)};</script>\n<script>`,
       );
     }
     res.send(html);
