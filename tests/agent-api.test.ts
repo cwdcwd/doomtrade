@@ -16,6 +16,10 @@ import { TradeEngine } from "../src/engine/trade-engine.js";
 import { AgentTradeEngine } from "../src/engine/agent-trade-engine.js";
 import { Portfolio } from "../src/portfolio/portfolio.js";
 import { AgentManager } from "../src/agent/agent-manager.js";
+import { AgentTradingPipeline } from "../src/agent/trading-pipeline.js";
+import { MomentumRotationStrategy } from "../src/themes/strategies/momentum-rotation.js";
+import { CongressFollowerStrategy } from "../src/themes/strategies/congress-follower.js";
+import { AgentDrivenStrategy } from "../src/themes/strategies/agent-driven.js";
 import { createApiRouter, type AppState } from "../src/api/routes.js";
 import type { Config } from "../src/config.js";
 
@@ -58,6 +62,31 @@ function createTestApp(db: Database) {
 
   const agentTradeEngine = new AgentTradeEngine(db, agentManager, mockConfig);
 
+  // Build strategy registry for the pipeline
+  const agentStrategies = new Map<string, import("../src/themes/strategy.js").ThemeStrategy>();
+  agentStrategies.set("momentum-rotation", new MomentumRotationStrategy());
+  agentStrategies.set("congress-follower", new CongressFollowerStrategy());
+  agentStrategies.set("agent-driven", new AgentDrivenStrategy());
+
+  // Mock market data service for the pipeline
+  const mockMarketData: import("../src/market/market.js").MarketDataService = {
+    getQuote: async (symbol: string) => {
+      const price = prices.get(symbol) ?? 100;
+      return { symbol, price, timestamp: new Date().toISOString(), source: "ccxt" as const };
+    },
+    getBars: async (_symbol: string) => [],
+    getSnapshot: async (symbols: string[]) =>
+      symbols.map((s) => ({ symbol: s, price: prices.get(s) ?? 100, timestamp: new Date().toISOString(), source: "ccxt" as const })),
+  };
+
+  const agentPipeline = new AgentTradingPipeline({
+    agentManager,
+    marketData: mockMarketData,
+    db,
+    strategies: agentStrategies,
+    defaultUniverse: ["BTC/USDT", "ETH/USDT"],
+  });
+
   const state: AppState = {
     decisionStore,
     tradeEngine,
@@ -68,6 +97,7 @@ function createTestApp(db: Database) {
     db,
     agentManager,
     agentTradeEngine,
+    agentPipeline,
   };
 
   const app = express();
@@ -474,14 +504,44 @@ describe("Agent API", () => {
   // ── POST /api/agents/:id/evaluate ────────────────────────────
 
   describe("POST /api/agents/:id/evaluate", () => {
-    it("should return 501 (not implemented yet)", async () => {
+    it("should return 404 for unknown agent", async () => {
+      const { app } = createTestApp(db);
+      const resp = await supertest(app).post("/api/agents/nonexistent/evaluate");
+      expect(resp.status).toBe(404);
+      expect(resp.body.error).toBe("Agent not found");
+    });
+
+    it("should return 409 for agent without strategy", async () => {
       const { app, agentManager } = createTestApp(db);
-      const agent = await agentManager.register("TestBot");
+      const agent = await agentManager.register("NoStrategyBot");
+      const resp = await supertest(app).post(`/api/agents/${agent.id}/evaluate`);
+      expect(resp.status).toBe(409);
+      expect(resp.body.error).toBe("Agent has no strategy assigned");
+    });
+
+    it("should return 409 for inactive agent", async () => {
+      const { app, agentManager } = createTestApp(db);
+      const agent = await agentManager.register("InactiveBot", { strategy: "momentum-rotation" });
+      await agentManager.deactivate(agent.id);
+      const resp = await supertest(app).post(`/api/agents/${agent.id}/evaluate`);
+      expect(resp.status).toBe(409);
+      expect(resp.body.error).toBe("Agent is not active");
+    });
+
+    it("should evaluate strategy and return result", async () => {
+      const { app, agentManager } = createTestApp(db);
+      const agent = await agentManager.register("EvalBot", { strategy: "momentum-rotation" });
 
       const resp = await supertest(app).post(`/api/agents/${agent.id}/evaluate`);
 
-      expect(resp.status).toBe(501);
-      expect(resp.body.error).toBe("Not implemented");
+      expect(resp.status).toBe(200);
+      expect(resp.body.agentId).toBe(agent.id);
+      expect(resp.body.agentName).toBe("EvalBot");
+      expect(resp.body.strategy).toBe("momentum-rotation");
+      expect(typeof resp.body.equityBefore).toBe("number");
+      expect(typeof resp.body.equityAfter).toBe("number");
+      expect(typeof resp.body.pnlChange).toBe("number");
+      expect(Array.isArray(resp.body.errors)).toBe(true);
     });
   });
 

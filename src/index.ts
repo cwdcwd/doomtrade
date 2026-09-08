@@ -167,6 +167,14 @@ async function main() {
   // Agent trade engine — per-agent risk checks and execution
   const agentTradeEngine = new AgentTradeEngine(db, agentManager, config, priceProvider);
 
+  // A2A trading coordinator — multi-agent orchestration
+  const { A2ATradingCoordinator } = await import("./integration/a2a-trading-coordinator.js");
+  const a2aCoordinator = new A2ATradingCoordinator({
+    agentManager,
+    agentPipeline,
+    db,
+  });
+
   // Start all enabled themes on boot
   await themeRunner.startAll();
 
@@ -184,6 +192,8 @@ async function main() {
     db,
     agentManager,
     agentTradeEngine,
+    agentPipeline,
+    a2aCoordinator,
   };
 
   const app = express();

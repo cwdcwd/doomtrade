@@ -70,6 +70,10 @@ export interface AppState {
   agentManager?: import("../agent/agent-manager.js").AgentManager;
   /** Per-agent trade engine for risk-scoped execution */
   agentTradeEngine?: import("../engine/agent-trade-engine.js").AgentTradeEngine;
+  /** Agent trading pipeline for strategy evaluation */
+  agentPipeline?: import("../agent/trading-pipeline.js").AgentTradingPipeline;
+  /** A2A trading coordinator for multi-agent orchestration */
+  a2aCoordinator?: import("../integration/a2a-trading-coordinator.js").A2ATradingCoordinator;
 }
 
 // ── Mode toggle cooldown (seconds) ──────────────────────────────
@@ -836,13 +840,101 @@ export function createApiRouter(state: AppState): Router {
   });
 
   router.post("/agents/:id/evaluate", async (req: Request, res: Response) => {
-    // Phase 3 will implement strategy evaluation here
     const agentId = String(req.params.id);
-    res.status(501).json({
-      error: "Not implemented",
-      message: "Strategy evaluation will be implemented in Phase 3",
-      agentId,
-    });
+
+    if (!state.agentPipeline) {
+      res.status(503).json({
+        error: "Agent pipeline not available",
+        message: "AgentTradingPipeline is not initialized on this server",
+        agentId,
+      });
+      return;
+    }
+
+    if (!state.agentManager) {
+      res.status(503).json({
+        error: "Agent manager not available",
+        message: "AgentManager is not initialized on this server",
+        agentId,
+      });
+      return;
+    }
+
+    try {
+      // Verify agent exists
+      const agent = await state.agentManager.getById(agentId);
+      if (!agent) {
+        res.status(404).json({
+          error: "Agent not found",
+          agentId,
+        });
+        return;
+      }
+
+      if (!agent.active) {
+        res.status(409).json({
+          error: "Agent is not active",
+          message: "Cannot evaluate a disabled agent",
+          agentId,
+        });
+        return;
+      }
+
+      if (!agent.strategy) {
+        res.status(409).json({
+          error: "Agent has no strategy assigned",
+          message: "Assign a strategy via PATCH /api/agents/:id before evaluating",
+          agentId,
+        });
+        return;
+      }
+
+      const result = await state.agentPipeline.runAgentCycle(
+        agentId,
+        agent.name,
+        agent.strategy,
+      );
+
+      res.json({
+        agentId: result.agentId,
+        agentName: result.agentName,
+        strategy: result.strategy,
+        signals: result.signals,
+        trades: result.trades,
+        errors: result.errors,
+        equityBefore: result.equityBefore,
+        equityAfter: result.equityAfter,
+        pnlChange: result.pnlChange,
+      });
+    } catch (err) {
+      res.status(500).json({
+        error: "Strategy evaluation failed",
+        message: (err as Error).message,
+        agentId,
+      });
+    }
+  });
+
+  // ── A2A coordination: run a full multi-agent trading cycle ─────
+
+  router.post("/agents/a2a-cycle", async (_req: Request, res: Response) => {
+    if (!state.a2aCoordinator) {
+      res.status(503).json({
+        error: "A2A coordinator not available",
+        message: "A2ATradingCoordinator is not initialized on this server",
+      });
+      return;
+    }
+
+    try {
+      const result = await state.a2aCoordinator.runCycle();
+      res.json(result);
+    } catch (err) {
+      res.status(500).json({
+        error: "A2A cycle failed",
+        message: (err as Error).message,
+      });
+    }
   });
 
   // ── Admin: reset sim state ──────────────────────────────────────
