@@ -39,7 +39,12 @@ interface CCXTOHLCV {
 
 interface CCXTExchangeInstance {
   fetchTicker(symbol: string): Promise<CCXTTicker>;
-  fetchOHLCV(symbol: string, timeframe: string, since?: number, limit?: number): Promise<CCXTOHLCV[]>;
+  fetchOHLCV(
+    symbol: string,
+    timeframe: string,
+    since?: number,
+    limit?: number,
+  ): Promise<CCXTOHLCV[]>;
   apiKey: string;
   secret: string;
   enableRateLimit: boolean;
@@ -182,10 +187,15 @@ function parseRangeDays(range: string): number {
   const n = parseInt(match[1], 10);
   const unit = match[2];
   switch (unit) {
-    case "d": return n;
-    case "w": return n * 7;
-    case "m": return n * 30;
-    case "y": return n * 365;
-    default: return 30;
+    case "d":
+      return n;
+    case "w":
+      return n * 7;
+    case "m":
+      return n * 30;
+    case "y":
+      return n * 365;
+    default:
+      return 30;
   }
 }

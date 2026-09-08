@@ -44,7 +44,10 @@ export class ThemeRunner {
   private store: ThemeStore;
   private opts: ThemeRunnerOptions;
 
-  constructor(private db: Database, opts: ThemeRunnerOptions) {
+  constructor(
+    private db: Database,
+    opts: ThemeRunnerOptions,
+  ) {
     this.opts = opts;
     this.store = new ThemeStore(db);
   }
@@ -171,7 +174,11 @@ export class ThemeRunner {
     let currentBalance = config.allocatedCapital;
     let peakBalance = config.allocatedCapital;
 
-    const subBalance = await execGet<{ balance: number; peak_balance: number; starting_balance: number }>(
+    const subBalance = await execGet<{
+      balance: number;
+      peak_balance: number;
+      starting_balance: number;
+    }>(
       this.db,
       convertPlaceholders(
         "SELECT balance, peak_balance, starting_balance FROM theme_subaccounts WHERE theme_id = ?",
@@ -224,13 +231,9 @@ export class ThemeRunner {
     );
 
     const closedTrades = (winLossStats?.wins ?? 0) + (winLossStats?.losses ?? 0);
-    const winRate = closedTrades > 0
-      ? (winLossStats!.wins / closedTrades)
-      : 0;
+    const winRate = closedTrades > 0 ? winLossStats!.wins / closedTrades : 0;
 
-    const drawdownPct = peakBalance > 0
-      ? ((peakBalance - currentBalance) / peakBalance) * 100
-      : 0;
+    const drawdownPct = peakBalance > 0 ? ((peakBalance - currentBalance) / peakBalance) * 100 : 0;
 
     const realizedPnl = currentBalance - startingBalance;
 
@@ -269,7 +272,7 @@ export class ThemeRunner {
       // For now, use a 60-second fallback interval
       console.warn(
         `Theme ${config.id}: cron scheduling requires Redis/BullMQ. ` +
-        `Using 60s interval fallback. Set REDIS_URL to enable cron.`
+          `Using 60s interval fallback. Set REDIS_URL to enable cron.`,
       );
       const timer = setInterval(() => {
         this.evaluateOnce(config.id).catch((err) => {

@@ -80,9 +80,17 @@ export class ThemeStore {
     );
 
     await execRun(this.db, sql, [
-      id, input.name, input.strategy, mode, schedule,
-      maxAllocationPct, maxTotalAllocationPct, maxPositions,
-      allocatedCapital, params, enabled,
+      id,
+      input.name,
+      input.strategy,
+      mode,
+      schedule,
+      maxAllocationPct,
+      maxTotalAllocationPct,
+      maxPositions,
+      allocatedCapital,
+      params,
+      enabled,
     ]);
 
     const config = await this.getById(id);
@@ -91,18 +99,12 @@ export class ThemeStore {
   }
 
   async getById(id: string): Promise<ThemeConfig | null> {
-    const sql = convertPlaceholders(
-      "SELECT * FROM themes WHERE id = ?",
-      this.db.backend,
-    );
+    const sql = convertPlaceholders("SELECT * FROM themes WHERE id = ?", this.db.backend);
     const row = await execGet<ThemeRow>(this.db, sql, [id]);
     return row ? rowToConfig(row) : null;
   }
 
-  async list(filter?: {
-    strategy?: string;
-    enabled?: boolean;
-  }): Promise<ThemeConfig[]> {
+  async list(filter?: { strategy?: string; enabled?: boolean }): Promise<ThemeConfig[]> {
     const conditions: string[] = [];
     const params: unknown[] = [];
 
@@ -191,10 +193,7 @@ export class ThemeStore {
   }
 
   async delete(id: string): Promise<boolean> {
-    const sql = convertPlaceholders(
-      "DELETE FROM themes WHERE id = ?",
-      this.db.backend,
-    );
+    const sql = convertPlaceholders("DELETE FROM themes WHERE id = ?", this.db.backend);
     await execRun(this.db, sql, [id]);
     const check = await this.getById(id);
     return check === null;
@@ -261,8 +260,12 @@ export class ThemeStore {
       this.db.backend,
     );
     await execRun(this.db, sql, [
-      id, themeId, timestamp,
-      result.signalsCount, result.decisionsCount, result.tradesCount,
+      id,
+      themeId,
+      timestamp,
+      result.signalsCount,
+      result.decisionsCount,
+      result.tradesCount,
       result.errors.length > 0 ? JSON.stringify(result.errors) : null,
     ]);
     return id;
@@ -271,15 +274,20 @@ export class ThemeStore {
   /**
    * List evaluation history for a theme.
    */
-  async listEvaluations(themeId: string, limit = 50): Promise<Array<{
-    id: string;
-    themeId: string;
-    timestamp: string;
-    signalsCount: number;
-    decisionsCount: number;
-    tradesCount: number;
-    errors: string[] | null;
-  }>> {
+  async listEvaluations(
+    themeId: string,
+    limit = 50,
+  ): Promise<
+    Array<{
+      id: string;
+      themeId: string;
+      timestamp: string;
+      signalsCount: number;
+      decisionsCount: number;
+      tradesCount: number;
+      errors: string[] | null;
+    }>
+  > {
     const sql = convertPlaceholders(
       "SELECT * FROM theme_evaluations WHERE theme_id = ? ORDER BY timestamp DESC LIMIT ?",
       this.db.backend,

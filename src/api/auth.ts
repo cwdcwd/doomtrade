@@ -21,9 +21,7 @@ export function apiKeyAuth(apiKey: string) {
 
     // Extract from Authorization: Bearer *** or X-API-Key header
     const authHeader = req.headers.authorization;
-    const bearerKey = authHeader?.startsWith("Bearer ")
-      ? authHeader.slice(7)
-      : undefined;
+    const bearerKey = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
     const headerKey = req.headers["x-api-key"] as string | undefined;
     const providedKey = bearerKey ?? headerKey;
 

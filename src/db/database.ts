@@ -71,348 +71,11 @@ export type Database = DbClient;
 // ── Migration definitions ──────────────────────────────────────
 
 /**
- * Migrations applied in order. Each must be idempotent.
- * Track applied migrations in the _migrations table.
- *
- * SQLite uses `datetime('now')`; Postgres uses `NOW()`.
- * The `dialect` helper below converts these.
+ * Migrations are defined in individual files under `./migrations/` and
+ * imported here as an ordered array. Each migration must be idempotent.
+ * Applied migrations are tracked in the `_migrations` table.
  */
-const MIGRATIONS: { version: number; name: string; sql?: string; postgresSql?: string; sqliteSql?: string }[] = [
-  {
-    version: 1,
-    name: "initial_schema",
-    sql: `
-      CREATE TABLE IF NOT EXISTS _migrations (
-        version INTEGER PRIMARY KEY,
-        name TEXT NOT NULL,
-        applied_at TEXT NOT NULL DEFAULT ({now})
-      );
-
-      CREATE TABLE IF NOT EXISTS decisions (
-        id TEXT PRIMARY KEY,
-        timestamp TEXT NOT NULL,
-        agent TEXT NOT NULL CHECK (agent IN ('doom', 'kangbot')),
-        symbol TEXT NOT NULL,
-        action TEXT NOT NULL CHECK (action IN ('buy', 'sell', 'hold')),
-        quantity REAL NOT NULL,
-        price_at_decision REAL NOT NULL,
-        rationale TEXT NOT NULL,
-        confidence INTEGER NOT NULL CHECK (confidence >= 1 AND confidence <= 10),
-        mode TEXT NOT NULL CHECK (mode IN ('sim', 'live')),
-        market_context TEXT,
-        created_at TEXT NOT NULL DEFAULT ({now})
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_decisions_agent ON decisions(agent);
-      CREATE INDEX IF NOT EXISTS idx_decisions_symbol ON decisions(symbol);
-      CREATE INDEX IF NOT EXISTS idx_decisions_timestamp ON decisions(timestamp);
-    `,
-  },
-  {
-    version: 2,
-    name: "trades_table",
-    sql: `
-      CREATE TABLE IF NOT EXISTS trades (
-        id TEXT PRIMARY KEY,
-        decision_id TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        symbol TEXT NOT NULL,
-        side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
-        quantity REAL NOT NULL,
-        order_type TEXT NOT NULL CHECK (order_type IN ('market', 'limit', 'stop')),
-        fill_price REAL,
-        status TEXT NOT NULL CHECK (status IN ('pending', 'filled', 'cancelled', 'rejected')),
-        fee REAL NOT NULL DEFAULT 0,
-        realized_pnl REAL NOT NULL DEFAULT 0,
-        mode TEXT NOT NULL CHECK (mode IN ('sim', 'live')),
-        executor TEXT NOT NULL CHECK (executor IN ('simulated', 'alpaca', 'ccxt')),
-        error TEXT,
-        created_at TEXT NOT NULL DEFAULT ({now}),
-        FOREIGN KEY (decision_id) REFERENCES decisions(id)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_trades_decision_id ON trades(decision_id);
-      CREATE INDEX IF NOT EXISTS idx_trades_symbol ON trades(symbol);
-      CREATE INDEX IF NOT EXISTS idx_trades_timestamp ON trades(timestamp);
-    `,
-  },
-  {
-    version: 3,
-    name: "sim_tables",
-    sql: `
-      CREATE TABLE IF NOT EXISTS sim_positions (
-        symbol TEXT PRIMARY KEY,
-        quantity REAL NOT NULL,
-        avg_entry_price REAL NOT NULL,
-        side TEXT NOT NULL CHECK (side IN ('long', 'short')),
-        updated_at TEXT NOT NULL DEFAULT ({now})
-      );
-
-      CREATE TABLE IF NOT EXISTS sim_balance (
-        id INTEGER PRIMARY KEY CHECK (id = 1),
-        cash REAL NOT NULL,
-        initial_cash REAL NOT NULL,
-        peak_equity REAL NOT NULL,
-        updated_at TEXT NOT NULL DEFAULT ({now})
-      );
-
-      CREATE TABLE IF NOT EXISTS sim_orders (
-        id TEXT PRIMARY KEY,
-        symbol TEXT NOT NULL,
-        side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
-        order_type TEXT NOT NULL CHECK (order_type IN ('market', 'limit')),
-        quantity REAL NOT NULL,
-        limit_price REAL,
-        status TEXT NOT NULL CHECK (status IN ('pending', 'filled', 'cancelled')),
-        created_at TEXT NOT NULL DEFAULT ({now}),
-        filled_at TEXT
-      );
-    `,
-  },
-  {
-    version: 4,
-    name: "portfolio_history",
-    sql: `
-      CREATE TABLE IF NOT EXISTS portfolio_history (
-        id TEXT PRIMARY KEY,
-        timestamp TEXT NOT NULL,
-        equity REAL NOT NULL,
-        cash REAL NOT NULL,
-        positions_value REAL NOT NULL,
-        unrealized_pnl REAL NOT NULL DEFAULT 0,
-        realized_pnl REAL NOT NULL DEFAULT 0,
-        mode TEXT NOT NULL CHECK (mode IN ('sim', 'live'))
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_portfolio_history_timestamp
-        ON portfolio_history(timestamp);
-    `,
-  },
-  {
-    version: 5,
-    name: "themes",
-    sql: `
-      CREATE TABLE IF NOT EXISTS themes (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        strategy TEXT NOT NULL,
-        mode TEXT NOT NULL DEFAULT 'sim' CHECK (mode IN ('sim', 'live')),
-        schedule TEXT NOT NULL,
-        max_allocation_pct REAL NOT NULL DEFAULT 5,
-        max_total_allocation_pct REAL NOT NULL DEFAULT 40,
-        max_positions INTEGER NOT NULL DEFAULT 10,
-        allocated_capital REAL NOT NULL DEFAULT 0,
-        params TEXT NOT NULL DEFAULT '{}',
-        enabled INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL DEFAULT ({now}),
-        updated_at TEXT NOT NULL DEFAULT ({now})
-      );
-
-      CREATE TABLE IF NOT EXISTS theme_signals (
-        id TEXT PRIMARY KEY,
-        theme_id TEXT NOT NULL,
-        signal_hash TEXT NOT NULL,
-        symbol TEXT NOT NULL,
-        action TEXT NOT NULL,
-        metadata TEXT,
-        processed_at TEXT NOT NULL DEFAULT ({now}),
-        FOREIGN KEY (theme_id) REFERENCES themes(id),
-        UNIQUE (theme_id, signal_hash)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_theme_signals_theme
-        ON theme_signals(theme_id);
-
-      CREATE TABLE IF NOT EXISTS theme_evaluations (
-        id TEXT PRIMARY KEY,
-        theme_id TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        signals_count INTEGER NOT NULL DEFAULT 0,
-        decisions_count INTEGER NOT NULL DEFAULT 0,
-        trades_count INTEGER NOT NULL DEFAULT 0,
-        errors TEXT,
-        FOREIGN KEY (theme_id) REFERENCES themes(id)
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_theme_evaluations_theme
-        ON theme_evaluations(theme_id);
-
-      CREATE TABLE IF NOT EXISTS theme_subaccounts (
-        theme_id TEXT PRIMARY KEY,
-        balance REAL NOT NULL,
-        peak_balance REAL NOT NULL,
-        starting_balance REAL NOT NULL,
-        FOREIGN KEY (theme_id) REFERENCES themes(id)
-      );
-
-      CREATE TABLE IF NOT EXISTS sim_sub_positions (
-        theme_id TEXT NOT NULL,
-        symbol TEXT NOT NULL,
-        quantity REAL NOT NULL,
-        avg_entry_price REAL NOT NULL,
-        side TEXT NOT NULL CHECK (side IN ('long', 'short')),
-        updated_at TEXT NOT NULL DEFAULT ({now}),
-        PRIMARY KEY (theme_id, symbol),
-        FOREIGN KEY (theme_id) REFERENCES themes(id)
-      );
-
-      CREATE TABLE IF NOT EXISTS sim_sub_orders (
-        id TEXT PRIMARY KEY,
-        theme_id TEXT NOT NULL,
-        symbol TEXT NOT NULL,
-        side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
-        order_type TEXT NOT NULL CHECK (order_type IN ('market', 'limit')),
-        quantity REAL NOT NULL,
-        limit_price REAL,
-        status TEXT NOT NULL CHECK (status IN ('pending', 'filled', 'cancelled')),
-        created_at TEXT NOT NULL DEFAULT ({now}),
-        filled_at TEXT,
-        realized_pnl REAL NOT NULL DEFAULT 0,
-        FOREIGN KEY (theme_id) REFERENCES themes(id)
-      );
-    `,
-  },
-  {
-    version: 6,
-    name: "sim_sub_orders_realized_pnl",
-    // For Postgres: conditional add. For SQLite: the column may already exist
-    // in the CREATE TABLE (migration 5), so we catch the duplicate error.
-    // The migration runner records the version regardless after success.
-    postgresSql: `
-      DO $$
-      BEGIN
-        IF NOT EXISTS (
-          SELECT 1 FROM information_schema.columns
-          WHERE table_name = 'sim_sub_orders' AND column_name = 'realized_pnl'
-        ) THEN
-          ALTER TABLE sim_sub_orders ADD COLUMN realized_pnl REAL NOT NULL DEFAULT 0;
-        END IF;
-      END $$;
-    `,
-    sqliteSql: `
-      ALTER TABLE sim_sub_orders ADD COLUMN realized_pnl REAL NOT NULL DEFAULT 0;
-    `,
-  },
-  {
-    version: 7,
-    name: "agent_tables",
-    sql: `
-      CREATE TABLE IF NOT EXISTS agents (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        starting_balance REAL NOT NULL DEFAULT 100,
-        strategy TEXT,
-        active INTEGER NOT NULL DEFAULT 1,
-        created_at TEXT NOT NULL DEFAULT ({now})
-      );
-
-      CREATE TABLE IF NOT EXISTS agent_balance (
-        agent_id TEXT PRIMARY KEY,
-        cash REAL NOT NULL,
-        initial_cash REAL NOT NULL,
-        peak_equity REAL NOT NULL,
-        updated_at TEXT NOT NULL DEFAULT ({now})
-      );
-
-      CREATE TABLE IF NOT EXISTS agent_positions (
-        agent_id TEXT NOT NULL,
-        symbol TEXT NOT NULL,
-        quantity REAL NOT NULL,
-        avg_entry_price REAL NOT NULL,
-        side TEXT NOT NULL DEFAULT 'long',
-        updated_at TEXT NOT NULL DEFAULT ({now}),
-        PRIMARY KEY (agent_id, symbol)
-      );
-
-      CREATE TABLE IF NOT EXISTS agent_orders (
-        id TEXT PRIMARY KEY,
-        agent_id TEXT NOT NULL,
-        decision_id TEXT,
-        symbol TEXT NOT NULL,
-        side TEXT NOT NULL CHECK (side IN ('buy', 'sell')),
-        order_type TEXT NOT NULL CHECK (order_type IN ('market', 'limit', 'stop')),
-        quantity REAL NOT NULL,
-        fill_price REAL,
-        fee REAL NOT NULL DEFAULT 0,
-        realized_pnl REAL NOT NULL DEFAULT 0,
-        status TEXT NOT NULL CHECK (status IN ('pending', 'filled', 'cancelled', 'rejected')),
-        error TEXT,
-        created_at TEXT NOT NULL DEFAULT ({now}),
-        filled_at TEXT
-      );
-
-      CREATE TABLE IF NOT EXISTS agent_portfolio_history (
-        id TEXT PRIMARY KEY,
-        agent_id TEXT NOT NULL,
-        timestamp TEXT NOT NULL DEFAULT ({now}),
-        equity REAL NOT NULL,
-        cash REAL NOT NULL,
-        positions_value REAL NOT NULL,
-        unrealized_pnl REAL NOT NULL DEFAULT 0,
-        realized_pnl REAL NOT NULL DEFAULT 0
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_agent_positions_agent ON agent_positions(agent_id);
-      CREATE INDEX IF NOT EXISTS idx_agent_orders_agent ON agent_orders(agent_id);
-      CREATE INDEX IF NOT EXISTS idx_agent_orders_symbol ON agent_orders(symbol);
-      CREATE INDEX IF NOT EXISTS idx_agent_portfolio_history_agent ON agent_portfolio_history(agent_id);
-    `,
-  },
-  {
-    version: 8,
-    name: "decisions_agent_any_name",
-    // Drop the CHECK(agent IN ('doom', 'kangbot')) constraint from decisions
-    // to allow any agent name (per-agent trading architecture).
-    // SQLite cannot ALTER TABLE DROP CONSTRAINT, so we recreate the table.
-    // Postgres drops the constraint by name.
-    postgresSql: `
-      DO $$
-      BEGIN
-        -- Drop the check constraint if it exists
-        IF EXISTS (
-          SELECT 1 FROM information_schema.table_constraints
-          WHERE table_name = 'decisions' AND constraint_type = 'CHECK'
-            AND constraint_name = 'decisions_agent_check'
-        ) THEN
-          ALTER TABLE decisions DROP CONSTRAINT decisions_agent_check;
-        END IF;
-        -- Also try the auto-generated name pattern
-        IF EXISTS (
-          SELECT 1 FROM information_schema.table_constraints
-          WHERE table_name = 'decisions' AND constraint_type = 'CHECK'
-            AND constraint_name = 'decisions_agent_check1'
-        ) THEN
-          ALTER TABLE decisions DROP CONSTRAINT decisions_agent_check1;
-        END IF;
-      END $$;
-    `,
-    sqliteSql: `
-      -- SQLite: recreate the table without the agent CHECK constraint.
-      -- Only do this if the constraint still exists.
-      CREATE TABLE IF NOT EXISTS decisions_new (
-        id TEXT PRIMARY KEY,
-        timestamp TEXT NOT NULL,
-        agent TEXT NOT NULL,
-        symbol TEXT NOT NULL,
-        action TEXT NOT NULL CHECK (action IN ('buy', 'sell', 'hold')),
-        quantity REAL NOT NULL,
-        price_at_decision REAL NOT NULL,
-        rationale TEXT NOT NULL,
-        confidence INTEGER NOT NULL CHECK (confidence >= 1 AND confidence <= 10),
-        mode TEXT NOT NULL CHECK (mode IN ('sim', 'live')),
-        market_context TEXT,
-        created_at TEXT NOT NULL DEFAULT (datetime('now'))
-      );
-      INSERT INTO decisions_new (id, timestamp, agent, symbol, action, quantity, price_at_decision, rationale, confidence, mode, market_context, created_at)
-      SELECT id, timestamp, agent, symbol, action, quantity, price_at_decision, rationale, confidence, mode, market_context, created_at FROM decisions;
-      DROP TABLE decisions;
-      ALTER TABLE decisions_new RENAME TO decisions;
-      CREATE INDEX IF NOT EXISTS idx_decisions_agent ON decisions(agent);
-      CREATE INDEX IF NOT EXISTS idx_decisions_symbol ON decisions(symbol);
-      CREATE INDEX IF NOT EXISTS idx_decisions_timestamp ON decisions(timestamp);
-    `,
-  },
-];
+import { migrations as MIGRATIONS } from "./migrations/index.js";
 
 /** Convert `{now}` placeholder to the dialect-appropriate expression. */
 function dialectSql(sql: string, backend: "sqlite" | "postgres"): string {
@@ -432,9 +95,7 @@ function dialectSql(sql: string, backend: "sqlite" | "postgres"): string {
  *
  * Returns a `DbClient` that abstracts the backend.
  */
-export async function openDatabase(
-  config: Partial<DatabaseConfig> = {},
-): Promise<DbClient> {
+export async function openDatabase(config: Partial<DatabaseConfig> = {}): Promise<DbClient> {
   const url = config.url ?? "";
 
   if (url) {
@@ -496,9 +157,10 @@ export async function runMigrations(db: DbClient): Promise<void> {
     if (appliedVersions.has(migration.version)) continue;
 
     // Pick the right SQL for the backend: dialect-specific overrides, else generic sql
-    const rawSql = db.backend === "postgres"
-      ? (migration.postgresSql ?? migration.sql)
-      : (migration.sqliteSql ?? migration.sql);
+    const rawSql =
+      db.backend === "postgres"
+        ? (migration.postgresSql ?? migration.sql)
+        : (migration.sqliteSql ?? migration.sql);
     if (!rawSql) continue; // No SQL for this backend — skip
 
     await db.run("BEGIN");
@@ -516,10 +178,10 @@ export async function runMigrations(db: DbClient): Promise<void> {
       // SQLite: tolerate "duplicate column name" — column already in CREATE TABLE
       if (db.backend === "sqlite" && String(err).includes("duplicate column name")) {
         // Record as applied so it doesn't retry
-        await db.run(
-          "INSERT INTO _migrations (version, name) VALUES ($1, $2)",
-          [migration.version, migration.name],
-        );
+        await db.run("INSERT INTO _migrations (version, name) VALUES ($1, $2)", [
+          migration.version,
+          migration.name,
+        ]);
         continue;
       }
       throw err;
@@ -615,11 +277,7 @@ async function openSqliteDatabase(opts: { path: string; verbose?: boolean }): Pr
 /**
  * Execute a statement (INSERT/UPDATE/DELETE) with optional params.
  */
-export async function execRun(
-  db: DbClient,
-  sql: string,
-  params: unknown[] = [],
-): Promise<void> {
+export async function execRun(db: DbClient, sql: string, params: unknown[] = []): Promise<void> {
   await db.run(sql, params);
 }
 

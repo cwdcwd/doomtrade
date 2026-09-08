@@ -7,6 +7,8 @@
  */
 
 import express from "express";
+import helmet from "helmet";
+import rateLimit from "express-rate-limit";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -45,23 +47,16 @@ async function createExecutor(
 ): Promise<Executor> {
   if (config.tradeMode === "live") {
     const { AlpacaExecutor } = await import("./executor/alpaca.js");
-    const { CCXTExecutor } = await import("./executor/ccxt.js");
+    // CCXTExecutor import removed — not yet wired. See beads doomtrade-78e.4.
 
     const alpaca = new AlpacaExecutor({
       keyId: config.alpacaKeyId,
       secretKey: config.alpacaSecretKey,
       paper: config.alpacaPaper,
     });
-    const ccxt = new CCXTExecutor({
-      exchange: config.ccxtExchange,
-      apiKey: config.ccxtApiKey,
-      apiSecret: config.ccxtApiSecret,
-    });
-
-    // For now, route everything through Alpaca for stocks.
-    // CCXT handles crypto. A composite executor can be built later.
-    // Return Alpaca as primary; CCXT is available for crypto symbols.
-    void ccxt; // CCXT instantiated and ready — will be wired into a composite executor
+    // CCXT executor for crypto symbols is not yet wired.
+    // A composite executor (stocks→Alpaca, crypto→CCXT) can be built later.
+    // See beads issue doomtrade-78e.4 for tracking.
     return alpaca;
   }
 
@@ -94,16 +89,17 @@ async function main() {
 
   // Market data: in sim mode, use public CCXT for crypto (no API keys needed).
   // In live mode, use full routing (Alpaca for stocks, CCXT for crypto).
-  const marketData = config.tradeMode === "live"
-    ? createMarketDataService({
-        alpacaKeyId: config.alpacaKeyId,
-        alpacaSecretKey: config.alpacaSecretKey,
-        alpacaPaper: config.alpacaPaper,
-        ccxtExchange: config.ccxtExchange,
-        ccxtApiKey: config.ccxtApiKey,
-        ccxtApiSecret: config.ccxtApiSecret,
-      })
-    : createPublicCryptoMarketData(config.ccxtExchange);
+  const marketData =
+    config.tradeMode === "live"
+      ? createMarketDataService({
+          alpacaKeyId: config.alpacaKeyId,
+          alpacaSecretKey: config.alpacaSecretKey,
+          alpacaPaper: config.alpacaPaper,
+          ccxtExchange: config.ccxtExchange,
+          ccxtApiKey: config.ccxtApiKey,
+          ccxtApiSecret: config.ccxtApiSecret,
+        })
+      : createPublicCryptoMarketData(config.ccxtExchange);
 
   // Research service for technical analysis (SMA, RSI)
   const research = new ResearchService(marketData);
@@ -130,7 +126,11 @@ async function main() {
   await agentManager.seedDefaults([
     { name: "Doom", startingBalance: config.simStartingBalance, strategy: "momentum-rotation" },
     { name: "Kangbot", startingBalance: config.simStartingBalance, strategy: "congress-follower" },
-    { name: "ThanosBot", startingBalance: config.simStartingBalance, strategy: "momentum-rotation" },
+    {
+      name: "ThanosBot",
+      startingBalance: config.simStartingBalance,
+      strategy: "momentum-rotation",
+    },
   ]);
 
   // Theme runner for experimental strategies
@@ -161,7 +161,15 @@ async function main() {
     marketData,
     db,
     strategies: agentStrategies,
-    defaultUniverse: ["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT", "DOGE/USDT", "AVAX/USDT"],
+    defaultUniverse: [
+      "BTC/USDT",
+      "ETH/USDT",
+      "SOL/USDT",
+      "XRP/USDT",
+      "ADA/USDT",
+      "DOGE/USDT",
+      "AVAX/USDT",
+    ],
     a2aEndpoint: config.a2aEndpoint || undefined,
     a2aToken: config.a2aToken || undefined,
   });
@@ -201,7 +209,18 @@ async function main() {
   const app = express();
 
   // Middleware
+  app.use(helmet());
   app.use(express.json());
+
+  // Rate limiting — 100 requests per 15 minutes per IP
+  const apiLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 100,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { error: "Too many requests, please try again later" },
+  });
+  app.use("/api", apiLimiter);
 
   // API authentication — protects all /api routes except /api/health
   // If DOOMTRADE_API_KEY is not set, auth is disabled (local dev only)

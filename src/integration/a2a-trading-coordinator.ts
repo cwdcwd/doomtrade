@@ -17,6 +17,7 @@ import type { Database } from "../db/database.js";
 import type { ThemeSignal } from "../themes/theme.js";
 import type { AgentTradeResult } from "../agent/trading-pipeline.js";
 import { execGet, execRun, convertPlaceholders } from "../db/database.js";
+import { errorMessage } from "../util/error.js";
 
 export interface A2ATradingConfig {
   agentManager: AgentManager;
@@ -111,7 +112,7 @@ export class A2ATradingCoordinator {
         }
       }
     } catch (err) {
-      errors.push(`Researcher error: ${(err as Error).message}`);
+      errors.push(`Researcher error: ${errorMessage(err)}`);
     }
 
     if (signals.length === 0) {
@@ -147,14 +148,14 @@ export class A2ATradingCoordinator {
         validations.push(...validatorResults);
       }
     } catch (err) {
-      errors.push(`Validator error: ${(err as Error).message}`);
+      errors.push(`Validator error: ${errorMessage(err)}`);
       // On error, conservatively approve nothing
       for (const sig of signals) {
         validations.push({
           symbol: sig.symbol,
           action: sig.action,
           approved: false,
-          reason: `Validation error: ${(err as Error).message}`,
+          reason: `Validation error: ${errorMessage(err)}`,
         });
       }
     }
@@ -186,7 +187,7 @@ export class A2ATradingCoordinator {
           }
         }
       } catch (err) {
-        errors.push(`Executor error: ${(err as Error).message}`);
+        errors.push(`Executor error: ${errorMessage(err)}`);
       }
     }
 

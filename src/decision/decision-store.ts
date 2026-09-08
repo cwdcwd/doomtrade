@@ -34,9 +34,7 @@ export class DecisionStore {
 
     const id = randomUUID();
     const timestamp = new Date().toISOString();
-    const marketContextJson = parsed.marketContext
-      ? JSON.stringify(parsed.marketContext)
-      : null;
+    const marketContextJson = parsed.marketContext ? JSON.stringify(parsed.marketContext) : null;
 
     await execRun(
       this.db,
@@ -59,11 +57,7 @@ export class DecisionStore {
       ],
     );
 
-    const row = await execGet<DecisionRow>(
-      this.db,
-      "SELECT * FROM decisions WHERE id = ?",
-      [id],
-    );
+    const row = await execGet<DecisionRow>(this.db, "SELECT * FROM decisions WHERE id = ?", [id]);
 
     return row ? rowToDecision(row) : this.create(parsed); // shouldn't happen
   }
@@ -72,11 +66,7 @@ export class DecisionStore {
    * Get a decision by ID. Returns null if not found.
    */
   async getById(id: string): Promise<Decision | null> {
-    const row = await execGet<DecisionRow>(
-      this.db,
-      "SELECT * FROM decisions WHERE id = ?",
-      [id],
-    );
+    const row = await execGet<DecisionRow>(this.db, "SELECT * FROM decisions WHERE id = ?", [id]);
 
     return row ? rowToDecision(row) : null;
   }

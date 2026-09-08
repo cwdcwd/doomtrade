@@ -90,7 +90,11 @@ export function createMarketDataService(config: MarketDataConfig): MarketDataSer
   async function getAlpaca(): Promise<MarketDataService> {
     if (!alpacaAdapter) {
       const { AlpacaMarketData } = await import("./alpaca-data.js");
-      alpacaAdapter = new AlpacaMarketData(config.alpacaKeyId, config.alpacaSecretKey, config.alpacaPaper);
+      alpacaAdapter = new AlpacaMarketData(
+        config.alpacaKeyId,
+        config.alpacaSecretKey,
+        config.alpacaPaper,
+      );
     }
     return alpacaAdapter;
   }
@@ -98,7 +102,11 @@ export function createMarketDataService(config: MarketDataConfig): MarketDataSer
   async function getCCXT(): Promise<MarketDataService> {
     if (!ccxtAdapter) {
       const { CCXTMarketData } = await import("./ccxt-data.js");
-      ccxtAdapter = new CCXTMarketData(config.ccxtExchange, config.ccxtApiKey, config.ccxtApiSecret);
+      ccxtAdapter = new CCXTMarketData(
+        config.ccxtExchange,
+        config.ccxtApiKey,
+        config.ccxtApiSecret,
+      );
     }
     return ccxtAdapter;
   }
@@ -121,11 +129,11 @@ export function createMarketDataService(config: MarketDataConfig): MarketDataSer
 
       if (stockSymbols.length > 0) {
         const alpaca = await getAlpaca();
-        results.push(...await alpaca.getSnapshot(stockSymbols));
+        results.push(...(await alpaca.getSnapshot(stockSymbols)));
       }
       if (cryptoSymbols.length > 0) {
         const ccxt = await getCCXT();
-        results.push(...await ccxt.getSnapshot(cryptoSymbols));
+        results.push(...(await ccxt.getSnapshot(cryptoSymbols)));
       }
 
       return results;

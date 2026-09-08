@@ -66,9 +66,7 @@ export function computeUnrealizedPnl(
   if (price == null || price <= 0) return 0;
 
   const diff =
-    position.side === "long"
-      ? price - position.avgEntryPrice
-      : position.avgEntryPrice - price;
+    position.side === "long" ? price - position.avgEntryPrice : position.avgEntryPrice - price;
 
   return diff * position.quantity;
 }
@@ -77,9 +75,7 @@ export function computeUnrealizedPnl(
  * Compute market value for a single position.
  * Returns 0 if currentPrice is null/undefined.
  */
-export function computeMarketValue(
-  position: Pick<Position, "quantity" | "currentPrice">,
-): number {
+export function computeMarketValue(position: Pick<Position, "quantity" | "currentPrice">): number {
   const price = position.currentPrice;
   if (price == null || price <= 0) return 0;
   return position.quantity * price;

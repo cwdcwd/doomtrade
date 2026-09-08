@@ -7,13 +7,7 @@
  * clear error is thrown on construction.
  */
 
-import type {
-  Balance,
-  Executor,
-  OrderRequest,
-  OrderResult,
-  Position,
-} from "./executor.js";
+import type { Balance, Executor, OrderRequest, OrderResult, Position } from "./executor.js";
 
 export interface AlpacaConfig {
   keyId: string;
@@ -73,11 +67,7 @@ interface AlpacaClient {
 }
 
 interface AlpacaSdk {
-  Alpaca: new (options: {
-    keyId: string;
-    secretKey: string;
-    paper: boolean;
-  }) => AlpacaClient;
+  Alpaca: new (options: { keyId: string; secretKey: string; paper: boolean }) => AlpacaClient;
 }
 
 /** Cache the dynamically imported SDK across instances. */
@@ -199,10 +189,7 @@ export class AlpacaExecutor implements Executor {
         timestamp: resp.created_at ?? new Date().toISOString(),
       };
     } catch (err) {
-      return this.reject(
-        order,
-        err instanceof Error ? err.message : String(err),
-      );
+      return this.reject(order, err instanceof Error ? err.message : String(err));
     }
   }
 

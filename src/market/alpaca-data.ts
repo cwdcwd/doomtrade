@@ -89,11 +89,16 @@ export class AlpacaMarketData implements MarketDataService {
  */
 function timeframeToAlpaca(tf: Timeframe) {
   switch (tf) {
-    case "1Min": return timeFrame(1, TimeFrameUnit.Minute);
-    case "5Min": return timeFrame(5, TimeFrameUnit.Minute);
-    case "15Min": return timeFrame(15, TimeFrameUnit.Minute);
-    case "1Hour": return timeFrame(1, TimeFrameUnit.Hour);
-    case "1Day": return timeFrame(1, TimeFrameUnit.Day);
+    case "1Min":
+      return timeFrame(1, TimeFrameUnit.Minute);
+    case "5Min":
+      return timeFrame(5, TimeFrameUnit.Minute);
+    case "15Min":
+      return timeFrame(15, TimeFrameUnit.Minute);
+    case "1Hour":
+      return timeFrame(1, TimeFrameUnit.Hour);
+    case "1Day":
+      return timeFrame(1, TimeFrameUnit.Day);
   }
 }
 
@@ -103,10 +108,15 @@ function parseRangeDays(range: string): number {
   const n = parseInt(match[1], 10);
   const unit = match[2];
   switch (unit) {
-    case "d": return n;
-    case "w": return n * 7;
-    case "m": return n * 30;
-    case "y": return n * 365;
-    default: return 30;
+    case "d":
+      return n;
+    case "w":
+      return n * 7;
+    case "m":
+      return n * 30;
+    case "y":
+      return n * 365;
+    default:
+      return 30;
   }
 }

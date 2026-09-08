@@ -6,13 +6,7 @@
  * executor is actually used; if it is missing a clear error is thrown.
  */
 
-import type {
-  Balance,
-  Executor,
-  OrderRequest,
-  OrderResult,
-  Position,
-} from "./executor.js";
+import type { Balance, Executor, OrderRequest, OrderResult, Position } from "./executor.js";
 
 export interface CCXTConfig {
   /** Exchange id, e.g. "binance", "coinbase", "kraken". */
@@ -98,9 +92,7 @@ async function loadLib(): Promise<CCXTLibrary> {
   } catch {
     // fall through
   }
-  throw new Error(
-    "ccxt is not installed. Install it with `npm install ccxt` to use CCXTExecutor.",
-  );
+  throw new Error("ccxt is not installed. Install it with `npm install ccxt` to use CCXTExecutor.");
 }
 
 /** Map a CCXT order status to our OrderStatus. */
@@ -174,8 +166,7 @@ export class CCXTExecutor implements Executor {
         params,
       );
 
-      const fillPrice =
-        raw.average ?? raw.price ?? null;
+      const fillPrice = raw.average ?? raw.price ?? null;
 
       return {
         id: raw.id,
@@ -188,15 +179,10 @@ export class CCXTExecutor implements Executor {
         status: mapStatus(raw.status),
         fee: raw.fee?.cost ?? 0,
         realizedPnl: 0,
-        timestamp: raw.timestamp
-          ? new Date(raw.timestamp).toISOString()
-          : new Date().toISOString(),
+        timestamp: raw.timestamp ? new Date(raw.timestamp).toISOString() : new Date().toISOString(),
       };
     } catch (err) {
-      return this.reject(
-        order,
-        err instanceof Error ? err.message : String(err),
-      );
+      return this.reject(order, err instanceof Error ? err.message : String(err));
     }
   }
 
@@ -245,11 +231,12 @@ export class CCXTExecutor implements Executor {
     const totalEntry = resp.total;
 
     const cash =
-      typeof freeEntry === "number" ? freeEntry :
-      typeof totalEntry === "number" ? totalEntry :
-      total;
-    const used =
-      typeof usedEntry === "number" ? usedEntry : 0;
+      typeof freeEntry === "number"
+        ? freeEntry
+        : typeof totalEntry === "number"
+          ? totalEntry
+          : total;
+    const used = typeof usedEntry === "number" ? usedEntry : 0;
 
     return {
       cash,

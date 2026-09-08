@@ -232,7 +232,10 @@ export class TradeEngine {
         status: "rejected",
         fee: 0,
         realizedPnl: 0,
-        error: riskChecks.filter((c) => !c.passed).map((c) => `${c.check}: ${c.reason}`).join("; "),
+        error: riskChecks
+          .filter((c) => !c.passed)
+          .map((c) => `${c.check}: ${c.reason}`)
+          .join("; "),
       });
 
       return {
@@ -375,8 +378,7 @@ export class TradeEngine {
       return { passed: true, check: "maxDrawdown" };
     }
 
-    const drawdownPct =
-      ((balance.peakEquity - balance.equity) / balance.peakEquity) * 100;
+    const drawdownPct = ((balance.peakEquity - balance.equity) / balance.peakEquity) * 100;
 
     if (drawdownPct >= this.config.maxDrawdownPct) {
       return {
@@ -431,13 +433,14 @@ export class TradeEngine {
       ],
     );
 
-    const row = await execGet<TradeRow>(
-      this.db,
-      "SELECT * FROM trades WHERE id = ?",
-      [id],
-    );
+    const row = await execGet<TradeRow>(this.db, "SELECT * FROM trades WHERE id = ?", [id]);
 
-    return row ? rowToTradeRecord(row) : this.logTrade(params); // shouldn't happen
+    if (!row) {
+      throw new Error(
+        `logTrade: INSERT succeeded but SELECT by id returned no row (id=${id}, symbol=${params.symbol})`,
+      );
+    }
+    return rowToTradeRecord(row);
   }
 
   // ── Query helpers ─────────────────────────────────────────────
@@ -446,11 +449,7 @@ export class TradeEngine {
    * Get a trade by ID.
    */
   async getTrade(id: string): Promise<TradeRecord | null> {
-    const row = await execGet<TradeRow>(
-      this.db,
-      "SELECT * FROM trades WHERE id = ?",
-      [id],
-    );
+    const row = await execGet<TradeRow>(this.db, "SELECT * FROM trades WHERE id = ?", [id]);
     return row ? rowToTradeRecord(row) : null;
   }
 
@@ -556,9 +555,7 @@ export class TradeEngine {
       params.push(filter.endDate);
     }
 
-    const whereClause = conditions.length > 0
-      ? " WHERE " + conditions.join(" AND ")
-      : "";
+    const whereClause = conditions.length > 0 ? " WHERE " + conditions.join(" AND ") : "";
 
     // ── Trade counts by status ──
     const countRows = await execAll<{ status: string; count: number }>(
@@ -576,10 +573,18 @@ export class TradeEngine {
     for (const row of countRows) {
       tradeCount += row.count;
       switch (row.status) {
-        case "filled": filledCount = row.count; break;
-        case "pending": pendingCount = row.count; break;
-        case "rejected": rejectedCount = row.count; break;
-        case "cancelled": cancelledCount = row.count; break;
+        case "filled":
+          filledCount = row.count;
+          break;
+        case "pending":
+          pendingCount = row.count;
+          break;
+        case "rejected":
+          rejectedCount = row.count;
+          break;
+        case "cancelled":
+          cancelledCount = row.count;
+          break;
       }
     }
 
@@ -623,11 +628,8 @@ export class TradeEngine {
     const netPnl = totalRealized - totalFees;
     const avgWin = wins > 0 ? grossProfit / wins : 0;
     const avgLoss = losses > 0 ? grossLoss / losses : 0;
-    const profitFactor = grossLoss !== 0
-      ? grossProfit / Math.abs(grossLoss)
-      : grossProfit > 0
-        ? Infinity
-        : 0;
+    const profitFactor =
+      grossLoss !== 0 ? grossProfit / Math.abs(grossLoss) : grossProfit > 0 ? Infinity : 0;
 
     // ── Equity curve from portfolio_history ──
     const equityConditions: string[] = [];
@@ -642,9 +644,8 @@ export class TradeEngine {
       equityParams.push(filter.endDate);
     }
 
-    const equityWhere = equityConditions.length > 0
-      ? " WHERE " + equityConditions.join(" AND ")
-      : "";
+    const equityWhere =
+      equityConditions.length > 0 ? " WHERE " + equityConditions.join(" AND ") : "";
 
     const equityRows = await execAll<{ equity: number }>(
       this.db,

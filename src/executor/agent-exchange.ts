@@ -163,8 +163,13 @@ export class AgentExchange implements Executor {
       this.db.backend,
     );
     await execRun(this.db, sql, [
-      randomUUID(), this.agentId, balance.equity, balance.cash,
-      positionsValue, unrealizedPnl, realizedPnl,
+      randomUUID(),
+      this.agentId,
+      balance.equity,
+      balance.cash,
+      positionsValue,
+      unrealizedPnl,
+      realizedPnl,
     ]);
   }
 
@@ -183,7 +188,10 @@ export class AgentExchange implements Executor {
         this.db.backend,
       );
       await execRun(this.db, insertSql, [
-        this.agentId, this.startingBalance, this.startingBalance, this.startingBalance,
+        this.agentId,
+        this.startingBalance,
+        this.startingBalance,
+        this.startingBalance,
       ]);
     }
   }
@@ -235,7 +243,12 @@ export class AgentExchange implements Executor {
     if (order.side === "buy") {
       const cost = notional + fee;
       if (balance.cash < cost) {
-        return this.reject(id, order, `Insufficient cash: need $${cost.toFixed(2)}, have $${balance.cash.toFixed(2)}`, timestamp);
+        return this.reject(
+          id,
+          order,
+          `Insufficient cash: need $${cost.toFixed(2)}, have $${balance.cash.toFixed(2)}`,
+          timestamp,
+        );
       }
       newCash = balance.cash - cost;
       if (position && position.side === "long" && position.quantity > 0) {
@@ -249,7 +262,12 @@ export class AgentExchange implements Executor {
     } else {
       // Sell — must have existing long position
       if (!position || position.quantity < order.quantity) {
-        return this.reject(id, order, `Insufficient position: need ${order.quantity} ${order.symbol}, have ${position?.quantity ?? 0}`, timestamp);
+        return this.reject(
+          id,
+          order,
+          `Insufficient position: need ${order.quantity} ${order.symbol}, have ${position?.quantity ?? 0}`,
+          timestamp,
+        );
       }
       realizedPnl = (fillPrice - position.avg_entry_price) * order.quantity - fee;
       newCash = balance.cash + notional - fee;
@@ -271,9 +289,16 @@ export class AgentExchange implements Executor {
       this.db.backend,
     );
     await execRun(this.db, orderSql, [
-      id, this.agentId, order.symbol, order.side,
+      id,
+      this.agentId,
+      order.symbol,
+      order.side,
       order.orderType === "stop" ? "market" : order.orderType,
-      order.quantity, fillPrice, fee, realizedPnl, timestamp,
+      order.quantity,
+      fillPrice,
+      fee,
+      realizedPnl,
+      timestamp,
     ]);
 
     return {
@@ -291,12 +316,7 @@ export class AgentExchange implements Executor {
     };
   }
 
-  private reject(
-    id: string,
-    order: OrderRequest,
-    error: string,
-    timestamp: string,
-  ): OrderResult {
+  private reject(id: string, order: OrderRequest, error: string, timestamp: string): OrderResult {
     return {
       id,
       clientOrderId: order.clientOrderId,
@@ -320,7 +340,9 @@ export class AgentExchange implements Executor {
     );
     const row = await execGet<AgentBalanceRow>(this.db, sql, [this.agentId]);
     if (!row) {
-      throw new Error(`agent_balance row not found for agent ${this.agentId} — was initBalance() called?`);
+      throw new Error(
+        `agent_balance row not found for agent ${this.agentId} — was initBalance() called?`,
+      );
     }
     return row;
   }

@@ -27,6 +27,7 @@ import type { MarketDataService } from "../market/market.js";
 import type { ThemeStrategy, ThemeContext } from "../themes/strategy.js";
 import type { ThemeConfig, ThemeEvaluationResult } from "../themes/theme.js";
 import { execAll, execGet, execRun, convertPlaceholders } from "../db/database.js";
+import { errorMessage } from "../util/error.js";
 
 export interface PipelineConfig {
   agentManager: AgentManager;
@@ -82,7 +83,7 @@ export class AgentTradingPipeline {
           strategy: agent.strategy,
           signals: 0,
           trades: 0,
-          errors: [`Pipeline error: ${(err as Error).message}`],
+          errors: [`Pipeline error: ${errorMessage(err)}`],
           equityBefore: 0,
           equityAfter: 0,
           pnlChange: 0,
@@ -152,7 +153,7 @@ export class AgentTradingPipeline {
         strategy: strategyType,
         signals: 0,
         trades: 0,
-        errors: [`Strategy evaluation failed: ${(err as Error).message}`],
+        errors: [`Strategy evaluation failed: ${errorMessage(err)}`],
         equityBefore,
         equityAfter: equityBefore,
         pnlChange: 0,
@@ -180,10 +181,7 @@ export class AgentTradingPipeline {
   /**
    * Build a ThemeContext for an agent's strategy evaluation.
    */
-  private async buildContext(
-    agentId: string,
-    exchange: AgentExchange,
-  ): Promise<ThemeContext> {
+  private async buildContext(agentId: string, exchange: AgentExchange): Promise<ThemeContext> {
     return {
       db: this.config.db,
       marketData: this.config.marketData,
@@ -241,12 +239,13 @@ export class AgentTradingPipeline {
    * Does NOT create a theme_subaccount — strategies use ctx.exchange
    * (AgentExchange) when available, which writes to agent_* tables.
    */
-  private async ensureThemeRow(themeId: string, agentName: string, strategy: string): Promise<void> {
+  private async ensureThemeRow(
+    themeId: string,
+    agentName: string,
+    strategy: string,
+  ): Promise<void> {
     const db = this.config.db;
-    const themeCheckSql = convertPlaceholders(
-      "SELECT id FROM themes WHERE id = ?",
-      db.backend,
-    );
+    const themeCheckSql = convertPlaceholders("SELECT id FROM themes WHERE id = ?", db.backend);
     const themeExists = await execGet<{ id: string }>(db, themeCheckSql, [themeId]);
     if (!themeExists) {
       const themeInsertSql = convertPlaceholders(
@@ -263,8 +262,9 @@ export class AgentTradingPipeline {
    */
   async getSummary(): Promise<string[]> {
     const leaderboard = await this.config.agentManager.leaderboard();
-    return leaderboard.map((e) =>
-      `#${e.rank} ${e.name}: $${e.equity.toFixed(2)} (${e.totalReturnPct > 0 ? "+" : ""}${e.totalReturnPct.toFixed(2)}%)`
+    return leaderboard.map(
+      (e) =>
+        `#${e.rank} ${e.name}: $${e.equity.toFixed(2)} (${e.totalReturnPct > 0 ? "+" : ""}${e.totalReturnPct.toFixed(2)}%)`,
     );
   }
 }

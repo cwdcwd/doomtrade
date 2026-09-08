@@ -90,11 +90,7 @@ export class MomentumScreenSignalSource implements SignalSource {
 
     for (const symbol of this.universe) {
       try {
-        const bars = await this.marketData.getBars(
-          symbol,
-          this.timeframe,
-          this.range,
-        );
+        const bars = await this.marketData.getBars(symbol, this.timeframe, this.range);
         if (bars.length === 0) continue;
 
         const closes = bars.map((b: Bar) => b.close);
@@ -128,7 +124,13 @@ export class MomentumScreenSignalSource implements SignalSource {
     if (ind.type === "sma-crossover") {
       const { fast, slow } = ind.periods;
       const sig = smaCrossover(closes, fast, slow);
-      return this.toThemeSignal(symbol, sig, closes, "sma-crossover", `SMA(${fast}/${slow}) crossover`);
+      return this.toThemeSignal(
+        symbol,
+        sig,
+        closes,
+        "sma-crossover",
+        `SMA(${fast}/${slow}) crossover`,
+      );
     }
 
     if (ind.type === "rsi") {
@@ -190,9 +192,7 @@ export class MomentumScreenSignalSource implements SignalSource {
     if (sig === "neutral") return null;
 
     const lastPrice = closes[closes.length - 1];
-    const reason = sig === "buy"
-      ? `${label}: bullish signal`
-      : `${label}: bearish signal`;
+    const reason = sig === "buy" ? `${label}: bullish signal` : `${label}: bearish signal`;
 
     return {
       symbol,

@@ -144,12 +144,9 @@ export class Portfolio {
 
     const realized = await this.getTotalRealizedPnl();
     const total = unrealized + realized;
-    const totalPct = this.config.initialCapital > 0
-      ? (total / this.config.initialCapital) * 100
-      : 0;
-    const unrealizedPct = balance.equity > 0
-      ? (unrealized / balance.equity) * 100
-      : 0;
+    const totalPct =
+      this.config.initialCapital > 0 ? (total / this.config.initialCapital) * 100 : 0;
+    const unrealizedPct = balance.equity > 0 ? (unrealized / balance.equity) * 100 : 0;
 
     return {
       unrealized,

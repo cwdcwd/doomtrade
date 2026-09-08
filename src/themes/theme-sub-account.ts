@@ -11,7 +11,14 @@
 import { randomUUID } from "node:crypto";
 import type { Database } from "../db/database.js";
 import { execAll, execGet, execRun, convertPlaceholders } from "../db/database.js";
-import type { Position, Balance, OrderRequest, OrderResult, OrderStatus, Executor } from "../executor/executor.js";
+import type {
+  Position,
+  Balance,
+  OrderRequest,
+  OrderResult,
+  OrderStatus,
+  Executor,
+} from "../executor/executor.js";
 
 interface SubPositionRow {
   theme_id: string;
@@ -51,10 +58,7 @@ export class ThemeSubAccount implements Executor {
   async initialize(startingBalance: number): Promise<void> {
     const existing = await execGet<SubBalanceRow>(
       this.db,
-      convertPlaceholders(
-        "SELECT * FROM theme_subaccounts WHERE theme_id = ?",
-        this.db.backend,
-      ),
+      convertPlaceholders("SELECT * FROM theme_subaccounts WHERE theme_id = ?", this.db.backend),
       [this.themeId],
     );
 
@@ -139,9 +143,10 @@ export class ThemeSubAccount implements Executor {
     const position = await this.getPositionRow(order.symbol);
 
     // Determine fill price
-    const fillPrice = order.orderType === "limit" && order.limitPrice
-      ? order.limitPrice
-      : this.resolvePrice(order.symbol, order.limitPrice);
+    const fillPrice =
+      order.orderType === "limit" && order.limitPrice
+        ? order.limitPrice
+        : this.resolvePrice(order.symbol, order.limitPrice);
 
     const notional = fillPrice * order.quantity;
     const fee = notional * this.feeRate;
@@ -155,7 +160,8 @@ export class ThemeSubAccount implements Executor {
       const cost = notional + fee;
       if (balance.balance < cost) {
         return this.reject(
-          id, order,
+          id,
+          order,
           `Insufficient cash in sub-account: need $${cost.toFixed(2)}, have $${balance.balance.toFixed(2)}`,
           timestamp,
         );
@@ -175,7 +181,8 @@ export class ThemeSubAccount implements Executor {
       // Sell — must have existing position
       if (!position || position.quantity < order.quantity) {
         return this.reject(
-          id, order,
+          id,
+          order,
           `Insufficient position: need ${order.quantity} ${order.symbol}, have ${position?.quantity ?? 0}`,
           timestamp,
         );
@@ -204,9 +211,17 @@ export class ThemeSubAccount implements Executor {
          VALUES (?, ?, ?, ?, ?, ?, ?, 'filled', ?, ?)`,
         this.db.backend,
       ),
-      [id, this.themeId, order.symbol, order.side,
-       order.orderType === "stop" ? "market" : order.orderType,
-       order.quantity, order.limitPrice ?? null, timestamp, realizedPnl],
+      [
+        id,
+        this.themeId,
+        order.symbol,
+        order.side,
+        order.orderType === "stop" ? "market" : order.orderType,
+        order.quantity,
+        order.limitPrice ?? null,
+        timestamp,
+        realizedPnl,
+      ],
     );
 
     return {
@@ -241,10 +256,7 @@ export class ThemeSubAccount implements Executor {
   private async getBalanceRow(): Promise<SubBalanceRow> {
     const row = await execGet<SubBalanceRow>(
       this.db,
-      convertPlaceholders(
-        "SELECT * FROM theme_subaccounts WHERE theme_id = ?",
-        this.db.backend,
-      ),
+      convertPlaceholders("SELECT * FROM theme_subaccounts WHERE theme_id = ?", this.db.backend),
       [this.themeId],
     );
     if (!row) {
@@ -327,12 +339,7 @@ export class ThemeSubAccount implements Executor {
     return cash + positionsValue;
   }
 
-  private reject(
-    id: string,
-    order: OrderRequest,
-    error: string,
-    timestamp: string,
-  ): OrderResult {
+  private reject(id: string, order: OrderRequest, error: string, timestamp: string): OrderResult {
     return {
       id,
       clientOrderId: order.clientOrderId,

@@ -56,8 +56,5 @@ export interface ThemeStrategy {
    * Evaluate the strategy: gather signals and produce decisions.
    * Called on each scheduled tick.
    */
-  evaluate(
-    ctx: ThemeContext,
-    config: ThemeConfig,
-  ): Promise<ThemeEvaluationResult>;
+  evaluate(ctx: ThemeContext, config: ThemeConfig): Promise<ThemeEvaluationResult>;
 }

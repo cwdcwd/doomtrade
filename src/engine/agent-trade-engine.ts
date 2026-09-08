@@ -140,7 +140,10 @@ export class AgentTradeEngine {
         side: decision.action as "buy" | "sell",
         quantity: decision.quantity,
         orderType,
-        error: riskChecks.filter((c) => !c.passed).map((c) => `${c.check}: ${c.reason}`).join("; "),
+        error: riskChecks
+          .filter((c) => !c.passed)
+          .map((c) => `${c.check}: ${c.reason}`)
+          .join("; "),
       });
 
       return {
@@ -290,8 +293,7 @@ export class AgentTradeEngine {
       return { passed: true, check: "maxDrawdown" };
     }
 
-    const drawdownPct =
-      ((balance.peakEquity - balance.equity) / balance.peakEquity) * 100;
+    const drawdownPct = ((balance.peakEquity - balance.equity) / balance.peakEquity) * 100;
 
     if (drawdownPct >= this.config.maxDrawdownPct) {
       return {
@@ -315,7 +317,8 @@ export class AgentTradeEngine {
       quantity: number;
       orderType: string;
       error: string;
-    }): Promise<void> {
+    },
+  ): Promise<void> {
     // AgentExchange handles filled orders internally; for rejected orders
     // we insert directly into agent_orders with status='rejected'
     const { randomUUID } = await import("node:crypto");
@@ -383,9 +386,10 @@ export class AgentTradeEngine {
     const positionsValue = positions.reduce((sum, p) => sum + (p.marketValue ?? 0), 0);
     const unrealizedPnl = positions.reduce((sum, p) => sum + (p.unrealizedPnl ?? 0), 0);
     const realizedPnl = balance.cash - balance.initialCash;
-    const totalReturnPct = balance.initialCash > 0
-      ? ((balance.equity - balance.initialCash) / balance.initialCash) * 100
-      : 0;
+    const totalReturnPct =
+      balance.initialCash > 0
+        ? ((balance.equity - balance.initialCash) / balance.initialCash) * 100
+        : 0;
 
     return {
       cash: balance.cash,
@@ -424,9 +428,10 @@ export class AgentTradeEngine {
     // Sharpe ratio from sell-trade returns
     const returns = sellTrades.map((t) => t.realized_pnl);
     const avgReturn = returns.length > 0 ? returns.reduce((a, b) => a + b, 0) / returns.length : 0;
-    const variance = returns.length > 0
-      ? returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length
-      : 0;
+    const variance =
+      returns.length > 0
+        ? returns.reduce((sum, r) => sum + Math.pow(r - avgReturn, 2), 0) / returns.length
+        : 0;
     const stdDev = Math.sqrt(variance);
     const sharpeRatio = stdDev > 0 ? (avgReturn / stdDev) * Math.sqrt(252) : 0;
 

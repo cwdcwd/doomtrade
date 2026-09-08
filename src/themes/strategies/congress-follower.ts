@@ -22,6 +22,7 @@ import { CongressTradesSignalSource } from "../sources/congress-trades.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
 import { ThemeStore } from "../theme-store.js";
 import { isWithinAllocationLimit } from "../allocation-check.js";
+import { errorMessage } from "../../util/error.js";
 
 interface CongressFollowerParams {
   politician: string;
@@ -32,10 +33,7 @@ interface CongressFollowerParams {
 export class CongressFollowerStrategy implements ThemeStrategy {
   readonly type = "congress-follower";
 
-  async evaluate(
-    ctx: ThemeContext,
-    config: ThemeConfig,
-  ): Promise<ThemeEvaluationResult> {
+  async evaluate(ctx: ThemeContext, config: ThemeConfig): Promise<ThemeEvaluationResult> {
     const params = config.params as unknown as CongressFollowerParams;
     const timestamp = new Date().toISOString();
     const errors: string[] = [];
@@ -69,7 +67,7 @@ export class CongressFollowerStrategy implements ThemeStrategy {
         signals: [],
         decisions: [],
         trades: [],
-        errors: [`Failed to fetch signals: ${(err as Error).message}`],
+        errors: [`Failed to fetch signals: ${errorMessage(err)}`],
       };
     }
 
@@ -98,13 +96,15 @@ export class CongressFollowerStrategy implements ThemeStrategy {
 
     // Get sub-account for execution — use ctx.exchange (AgentExchange)
     // when provided by the agent pipeline, otherwise fall back to ThemeSubAccount.
-    const subAccount = ctx.exchange ?? new ThemeSubAccount(ctx.db, config.id, {
-      getCurrentPrice: (symbol: string) => {
-        // Synchronous fallback — will be overridden by async price in placeOrder
-        // if the order has a limitPrice. For market orders, we use priceAtSignal.
-        return null;
-      },
-    });
+    const subAccount =
+      ctx.exchange ??
+      new ThemeSubAccount(ctx.db, config.id, {
+        getCurrentPrice: (symbol: string) => {
+          // Synchronous fallback — will be overridden by async price in placeOrder
+          // if the order has a limitPrice. For market orders, we use priceAtSignal.
+          return null;
+        },
+      });
 
     // Get current equity for allocation
     let equity = 0;
@@ -157,7 +157,11 @@ export class CongressFollowerStrategy implements ThemeStrategy {
       if (signal.action === "buy") {
         const buyValue = qty * price;
         const check = isWithinAllocationLimit(
-          positions, equity, config.maxTotalAllocationPct, config.maxAllocationPct, buyValue,
+          positions,
+          equity,
+          config.maxTotalAllocationPct,
+          config.maxAllocationPct,
+          buyValue,
         );
         if (!check.allowed) {
           errors.push(`Allocation limit for ${signal.symbol}: ${check.reason}`);
@@ -169,7 +173,13 @@ export class CongressFollowerStrategy implements ThemeStrategy {
       const meta = signal.metadata as Record<string, unknown>;
       const signalHash = `${meta.member_slug}-${signal.symbol}-${meta.transaction_date}-${signal.action}`;
       const store = new ThemeStore(ctx.db);
-      await store.recordSignal(config.id, signalHash, signal.symbol, signal.action, signal.metadata as Record<string, unknown>);
+      await store.recordSignal(
+        config.id,
+        signalHash,
+        signal.symbol,
+        signal.action,
+        signal.metadata as Record<string, unknown>,
+      );
 
       // Place order via sub-account — pass signal price as limitPrice
       // so the sub-account doesn't need a price provider
@@ -189,7 +199,7 @@ export class CongressFollowerStrategy implements ThemeStrategy {
           errors.push(`Order rejected for ${signal.symbol}: ${result.error}`);
         }
       } catch (err) {
-        errors.push(`Trade failed for ${signal.symbol}: ${(err as Error).message}`);
+        errors.push(`Trade failed for ${signal.symbol}: ${errorMessage(err)}`);
       }
     }
 

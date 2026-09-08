@@ -37,9 +37,7 @@ export interface SimulatedExchangeConfig {
   getCurrentPrice?: (symbol: string) => number | null;
 }
 
-const DEFAULT_CONFIG: Required<
-  Omit<SimulatedExchangeConfig, "getCurrentPrice">
-> = {
+const DEFAULT_CONFIG: Required<Omit<SimulatedExchangeConfig, "getCurrentPrice">> = {
   initialCash: 100_000,
   feeRate: 0.001,
   slippageRate: 0,
@@ -128,14 +126,7 @@ export class SimulatedExchange implements Executor {
           this.db,
           `INSERT INTO sim_orders (id, symbol, side, order_type, quantity, limit_price, status)
            VALUES (?, ?, ?, ?, ?, ?, 'pending')`,
-          [
-            id,
-            order.symbol,
-            order.side,
-            "limit",
-            order.quantity,
-            order.limitPrice ?? null,
-          ],
+          [id, order.symbol, order.side, "limit", order.quantity, order.limitPrice ?? null],
         );
 
         return {
@@ -182,8 +173,7 @@ export class SimulatedExchange implements Executor {
     return rows.map((row) => {
       const currentPrice = this.resolvePrice(row.symbol, row.avg_entry_price);
       const marketValue = row.quantity * currentPrice;
-      const unrealizedPnl =
-        (currentPrice - row.avg_entry_price) * row.quantity;
+      const unrealizedPnl = (currentPrice - row.avg_entry_price) * row.quantity;
 
       return {
         symbol: row.symbol,
@@ -200,10 +190,7 @@ export class SimulatedExchange implements Executor {
     await this.ready();
     const row = await this.getBalanceRow();
     const positions = await this.getPositions();
-    const positionsValue = positions.reduce(
-      (sum, p) => sum + (p.marketValue ?? 0),
-      0,
-    );
+    const positionsValue = positions.reduce((sum, p) => sum + (p.marketValue ?? 0), 0);
     const equity = row.cash + positionsValue;
 
     return {
@@ -228,10 +215,7 @@ export class SimulatedExchange implements Executor {
     const filled: OrderResult[] = [];
 
     for (const order of pending) {
-      const currentPrice = this.resolvePrice(
-        order.symbol,
-        order.limit_price ?? undefined,
-      );
+      const currentPrice = this.resolvePrice(order.symbol, order.limit_price ?? undefined);
       const wouldFill =
         (order.side === "buy" && order.limit_price! >= currentPrice) ||
         (order.side === "sell" && order.limit_price! <= currentPrice);
@@ -269,11 +253,7 @@ export class SimulatedExchange implements Executor {
       await execRun(
         this.db,
         "INSERT INTO sim_balance (id, cash, initial_cash, peak_equity) VALUES (1, ?, ?, ?)",
-        [
-          this.config.initialCash,
-          this.config.initialCash,
-          this.config.initialCash,
-        ],
+        [this.config.initialCash, this.config.initialCash, this.config.initialCash],
       );
     }
   }
@@ -294,9 +274,7 @@ export class SimulatedExchange implements Executor {
     const cached = this.priceCache.get(symbol);
     if (cached) return cached;
 
-    throw new Error(
-      `No price available for ${symbol}. Provide a price provider or limit price.`,
-    );
+    throw new Error(`No price available for ${symbol}. Provide a price provider or limit price.`);
   }
 
   private applySlippage(price: number, side: "buy" | "sell"): number {
@@ -351,8 +329,7 @@ export class SimulatedExchange implements Executor {
 
       if (position && position.side === "long") {
         // Add to existing long position — weighted average entry
-        const totalCost =
-          position.avg_entry_price * position.quantity + notional;
+        const totalCost = position.avg_entry_price * position.quantity + notional;
         newQty = position.quantity + order.quantity;
         newAvgEntry = totalCost / newQty;
       } else {
@@ -371,8 +348,7 @@ export class SimulatedExchange implements Executor {
         );
       }
 
-      realizedPnl =
-        (fillPrice - position.avg_entry_price) * order.quantity - fee;
+      realizedPnl = (fillPrice - position.avg_entry_price) * order.quantity - fee;
       newCash = balance.cash + notional - fee;
       newQty = position.quantity - order.quantity;
       newAvgEntry = newQty > 0 ? position.avg_entry_price : 0;
@@ -418,12 +394,7 @@ export class SimulatedExchange implements Executor {
     };
   }
 
-  private reject(
-    id: string,
-    order: OrderRequest,
-    error: string,
-    timestamp: string,
-  ): OrderResult {
+  private reject(id: string, order: OrderRequest, error: string, timestamp: string): OrderResult {
     return {
       id,
       clientOrderId: order.clientOrderId,
@@ -441,10 +412,7 @@ export class SimulatedExchange implements Executor {
   }
 
   private async getBalanceRow(): Promise<SimBalanceRow> {
-    const row = await execGet<SimBalanceRow>(
-      this.db,
-      "SELECT * FROM sim_balance WHERE id = 1",
-    );
+    const row = await execGet<SimBalanceRow>(this.db, "SELECT * FROM sim_balance WHERE id = 1");
     if (!row) {
       throw new Error("sim_balance row not found — was initBalance() called?");
     }

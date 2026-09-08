@@ -7,11 +7,7 @@ declare module "@cwdcwd/agent-bridge" {
 
   export class A2AClient {
     constructor(options: A2AClientOptions);
-    notify(
-      event: string,
-      payload: Record<string, unknown>,
-      sender?: string,
-    ): Promise<void>;
+    notify(event: string, payload: Record<string, unknown>, sender?: string): Promise<void>;
     sendMessage(text: string, sender?: string): Promise<void>;
   }
 

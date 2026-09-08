@@ -24,6 +24,7 @@ import { AgentSignalSource } from "../sources/agent-signal.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
 import { ThemeStore } from "../theme-store.js";
 import { isWithinAllocationLimit } from "../allocation-check.js";
+import { errorMessage } from "../../util/error.js";
 
 interface AgentDrivenParams {
   agentEndpoint: string;
@@ -36,10 +37,7 @@ interface AgentDrivenParams {
 export class AgentDrivenStrategy implements ThemeStrategy {
   readonly type = "agent-driven";
 
-  async evaluate(
-    ctx: ThemeContext,
-    config: ThemeConfig,
-  ): Promise<ThemeEvaluationResult> {
+  async evaluate(ctx: ThemeContext, config: ThemeConfig): Promise<ThemeEvaluationResult> {
     const params = config.params as unknown as AgentDrivenParams;
     const timestamp = new Date().toISOString();
     const errors: string[] = [];
@@ -98,7 +96,7 @@ export class AgentDrivenStrategy implements ThemeStrategy {
         signals: [],
         decisions: [],
         trades: [],
-        errors: [`Agent signal fetch failed: ${(err as Error).message}`],
+        errors: [`Agent signal fetch failed: ${errorMessage(err)}`],
       };
     }
 
@@ -155,7 +153,11 @@ export class AgentDrivenStrategy implements ThemeStrategy {
         // Enforce maxTotalAllocationPct (fixes #37)
         const buyValue = qty * price;
         const allocCheck = isWithinAllocationLimit(
-          positions, equity, config.maxTotalAllocationPct, config.maxAllocationPct, buyValue,
+          positions,
+          equity,
+          config.maxTotalAllocationPct,
+          config.maxAllocationPct,
+          buyValue,
         );
         if (!allocCheck.allowed) {
           errors.push(`Allocation limit for ${signal.symbol}: ${allocCheck.reason}`);
@@ -167,13 +169,10 @@ export class AgentDrivenStrategy implements ThemeStrategy {
       // SQLite-only INSERT OR IGNORE; ThemeStore uses convertPlaceholders)
       const signalHash = `agent-${signal.symbol}-${signal.action}-${timestamp}`;
       const store = new ThemeStore(ctx.db);
-      await store.recordSignal(
-        config.id,
-        signalHash,
-        signal.symbol,
-        signal.action,
-        { source: "agent", ...signal.metadata } as Record<string, unknown>,
-      );
+      await store.recordSignal(config.id, signalHash, signal.symbol, signal.action, {
+        source: "agent",
+        ...signal.metadata,
+      } as Record<string, unknown>);
 
       // Place order
       try {
@@ -192,7 +191,7 @@ export class AgentDrivenStrategy implements ThemeStrategy {
           errors.push(`Order rejected for ${signal.symbol}: ${result.error}`);
         }
       } catch (err) {
-        errors.push(`Trade failed for ${signal.symbol}: ${(err as Error).message}`);
+        errors.push(`Trade failed for ${signal.symbol}: ${errorMessage(err)}`);
       }
     }
 

@@ -82,15 +82,19 @@ export class AgentCoordinator {
     });
 
     // Notify peer agent of the new decision
-    await this.a2a.notify("decision:created", {
-      decisionId: decision.id,
-      agent: input.agent,
-      symbol: input.symbol,
-      action: input.action,
-      quantity: input.quantity,
-      confidence: input.confidence,
-      rationale: input.rationale,
-    }, this.selfName);
+    await this.a2a.notify(
+      "decision:created",
+      {
+        decisionId: decision.id,
+        agent: input.agent,
+        symbol: input.symbol,
+        action: input.action,
+        quantity: input.quantity,
+        confidence: input.confidence,
+        rationale: input.rationale,
+      },
+      this.selfName,
+    );
 
     return decision;
   }
@@ -98,7 +102,10 @@ export class AgentCoordinator {
   /**
    * Execute a decision and notify the peer of the outcome.
    */
-  async executeDecision(decisionId: string, orderType?: "market" | "limit" | "stop"): Promise<void> {
+  async executeDecision(
+    decisionId: string,
+    orderType?: "market" | "limit" | "stop",
+  ): Promise<void> {
     const decision = await this.decisionStore.getById(decisionId);
     if (!decision) {
       throw new Error(`Decision not found: ${decisionId}`);
@@ -114,23 +121,29 @@ export class AgentCoordinator {
 
     // Notify peer of execution outcome
     if (result.riskPassed && result.orderResult) {
-      await this.a2a.notify("trade:executed", {
-        decisionId,
-        symbol: decision.symbol,
-        action: decision.action,
-        status: result.orderResult.status,
-        fillPrice: result.orderResult.fillPrice,
-        fee: result.orderResult.fee,
-        realizedPnl: result.orderResult.realizedPnl,
-      }, this.selfName);
+      await this.a2a.notify(
+        "trade:executed",
+        {
+          decisionId,
+          symbol: decision.symbol,
+          action: decision.action,
+          status: result.orderResult.status,
+          fillPrice: result.orderResult.fillPrice,
+          fee: result.orderResult.fee,
+          realizedPnl: result.orderResult.realizedPnl,
+        },
+        this.selfName,
+      );
     } else if (!result.riskPassed) {
-      await this.a2a.notify("trade:blocked", {
-        decisionId,
-        symbol: decision.symbol,
-        reasons: result.riskChecks
-          .filter((c) => !c.passed)
-          .map((c) => `${c.check}: ${c.reason}`),
-      }, this.selfName);
+      await this.a2a.notify(
+        "trade:blocked",
+        {
+          decisionId,
+          symbol: decision.symbol,
+          reasons: result.riskChecks.filter((c) => !c.passed).map((c) => `${c.check}: ${c.reason}`),
+        },
+        this.selfName,
+      );
     }
   }
 

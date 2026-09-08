@@ -12,26 +12,38 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "lint": "tsc --noEmit"
+    "lint": "eslint src/ --max-warnings 50",
+    "lint:fix": "eslint src/ --fix",
+    "format": "prettier --write 'src/**/*.ts'",
+    "format:check": "prettier --check 'src/**/*.ts'",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@alpacahq/alpaca-trade-api": "^4.0.1",
     "@cwdcwd/agent-bridge": "git+https://github.com/cwdcwd/agent-bridge.git",
     "ccxt": "^4.5.0",
     "express": "^4.21.0",
+    "express-rate-limit": "^8.7.0",
+    "helmet": "^8.3.0",
     "pg": "^8.23.0",
     "sql.js": "^1.13.0",
     "zod": "^3.23.0"
   },
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.0",
+    "@types/helmet": "^0.0.48",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.23.1",
     "@types/sql.js": "^1.4.0",
     "@types/supertest": "^6.0.0",
+    "@vitest/coverage-v8": "^5.0.0",
+    "eslint": "^10.10.0",
+    "prettier": "^3.9.6",
     "supertest": "^7.0.0",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^2.1.0"
   },
   "engines": {

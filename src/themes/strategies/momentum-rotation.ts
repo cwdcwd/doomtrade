@@ -26,6 +26,7 @@ import { smaCrossover, rsiSignal, type Signal } from "../../research/indicators.
 import { ThemeSubAccount } from "../theme-sub-account.js";
 import { ThemeStore } from "../theme-store.js";
 import { isWithinAllocationLimit } from "../allocation-check.js";
+import { errorMessage } from "../../util/error.js";
 
 // ── Config types (mirrors momentum-screen.ts for self-containment) ──
 
@@ -66,10 +67,7 @@ export interface MomentumRotationParams {
 export class MomentumRotationStrategy implements ThemeStrategy {
   readonly type = "momentum-rotation";
 
-  async evaluate(
-    ctx: ThemeContext,
-    config: ThemeConfig,
-  ): Promise<ThemeEvaluationResult> {
+  async evaluate(ctx: ThemeContext, config: ThemeConfig): Promise<ThemeEvaluationResult> {
     const timestamp = new Date().toISOString();
     const errors: string[] = [];
     const params = config.params as unknown as MomentumRotationParams;
@@ -119,9 +117,11 @@ export class MomentumRotationStrategy implements ThemeStrategy {
     // ── Set up sub-account for order execution ──────────────────
     // Use ctx.exchange (AgentExchange) when provided by the agent pipeline,
     // otherwise fall back to a ThemeSubAccount (theme runner).
-    const subAccount = ctx.exchange ?? new ThemeSubAccount(ctx.db, config.id, {
-      getCurrentPrice: () => null,
-    });
+    const subAccount =
+      ctx.exchange ??
+      new ThemeSubAccount(ctx.db, config.id, {
+        getCurrentPrice: () => null,
+      });
 
     // Get current equity for allocation
     let equity = 0;
@@ -190,7 +190,7 @@ export class MomentumRotationStrategy implements ThemeStrategy {
             errors.push(`Sell rejected for ${pos.symbol}: ${result.error}`);
           }
         } catch (err) {
-          errors.push(`Sell failed for ${pos.symbol}: ${(err as Error).message}`);
+          errors.push(`Sell failed for ${pos.symbol}: ${errorMessage(err)}`);
         }
       }
     }
@@ -232,7 +232,11 @@ export class MomentumRotationStrategy implements ThemeStrategy {
         const buyValue = qty * price;
         const allocPositions = await subAccount.getPositions();
         const allocCheck = isWithinAllocationLimit(
-          allocPositions, equity, config.maxTotalAllocationPct, config.maxAllocationPct, buyValue,
+          allocPositions,
+          equity,
+          config.maxTotalAllocationPct,
+          config.maxAllocationPct,
+          buyValue,
         );
         if (!allocCheck.allowed) {
           errors.push(`Allocation limit for ${signal.symbol}: ${allocCheck.reason}`);
@@ -261,7 +265,7 @@ export class MomentumRotationStrategy implements ThemeStrategy {
             errors.push(`Buy rejected for ${signal.symbol}: ${result.error}`);
           }
         } catch (err) {
-          errors.push(`Buy failed for ${signal.symbol}: ${(err as Error).message}`);
+          errors.push(`Buy failed for ${signal.symbol}: ${errorMessage(err)}`);
         }
       }
     }
@@ -355,7 +359,7 @@ export class MomentumRotationStrategy implements ThemeStrategy {
           metadata,
         });
       } catch (err) {
-        errors.push(`Failed to screen ${symbol}: ${(err as Error).message}`);
+        errors.push(`Failed to screen ${symbol}: ${errorMessage(err)}`);
         continue;
       }
     }
@@ -383,12 +387,7 @@ export class MomentumRotationStrategy implements ThemeStrategy {
   /**
    * Generate a deterministic signal hash for dedup.
    */
-  private hashSignal(
-    themeId: string,
-    symbol: string,
-    action: string,
-    prefix: string,
-  ): string {
+  private hashSignal(themeId: string, symbol: string, action: string, prefix: string): string {
     return `${prefix}-${symbol}-${action}`;
   }
 

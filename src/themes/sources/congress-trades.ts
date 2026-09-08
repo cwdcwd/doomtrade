@@ -87,8 +87,7 @@ export class CongressTradesSignalSource implements SignalSource {
     return data.trades
       .filter((t) => t.ticker && t.type !== "exchange")
       .map((t): ThemeSignal => {
-        const action: "buy" | "sell" =
-          t.type === "purchase" ? "buy" : "sell";
+        const action: "buy" | "sell" = t.type === "purchase" ? "buy" : "sell";
 
         return {
           symbol: t.ticker,

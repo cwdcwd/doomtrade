@@ -10,6 +10,7 @@
 import type { SignalSource } from "../signal-source.js";
 import type { ThemeSignal } from "../theme.js";
 import type { Position } from "../../executor/executor.js";
+import { errorMessage } from "../../util/error.js";
 
 export interface AgentSignalSourceConfig {
   /** A2A endpoint for the agent */
@@ -47,11 +48,16 @@ export class AgentSignalSource implements SignalSource {
 
     const prompt = (this.config.promptTemplate ?? DEFAULT_PROMPT)
       .replace("{equity}", String(equity))
-      .replace("{positions}", JSON.stringify(positions.map((p) => ({
-        symbol: p.symbol,
-        quantity: p.quantity,
-        avgEntryPrice: p.avgEntryPrice,
-      }))))
+      .replace(
+        "{positions}",
+        JSON.stringify(
+          positions.map((p) => ({
+            symbol: p.symbol,
+            quantity: p.quantity,
+            avgEntryPrice: p.avgEntryPrice,
+          })),
+        ),
+      )
       .replace("{universe}", this.config.universe?.join(", ") ?? "any");
 
     // Dynamic import to avoid hard dependency on agent-bridge
@@ -79,16 +85,18 @@ export class AgentSignalSource implements SignalSource {
       const jsonStr = jsonMatch ? jsonMatch[0] : response;
       const parsed = JSON.parse(jsonStr);
 
-      signals = (Array.isArray(parsed) ? parsed : [parsed]).map((item: any): ThemeSignal => ({
-        symbol: String(item.symbol ?? item.ticker ?? ""),
-        action: (item.action ?? item.recommendation ?? "hold") as "buy" | "sell" | "hold",
-        reason: String(item.reason ?? item.rationale ?? "Agent recommendation"),
-        suggestedQuantity: item.suggestedQuantity ?? item.quantity,
-      })).filter((s: ThemeSignal) => s.symbol.length > 0);
+      signals = (Array.isArray(parsed) ? parsed : [parsed])
+        .map((item: any): ThemeSignal => ({
+          symbol: String(item.symbol ?? item.ticker ?? ""),
+          action: (item.action ?? item.recommendation ?? "hold") as "buy" | "sell" | "hold",
+          reason: String(item.reason ?? item.rationale ?? "Agent recommendation"),
+          suggestedQuantity: item.suggestedQuantity ?? item.quantity,
+        }))
+        .filter((s: ThemeSignal) => s.symbol.length > 0);
     } catch (err) {
       // Surface parse errors with context for observability (fixes #39)
       throw new Error(
-        `Failed to parse agent response as JSON: ${(err as Error).message}. Response: ${response.slice(0, 200)}`,
+        `Failed to parse agent response as JSON: ${errorMessage(err)}. Response: ${response.slice(0, 200)}`,
       );
     }
 

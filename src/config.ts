@@ -63,7 +63,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     databasePath: env.DATABASE_PATH,
     databaseUrl: env.DATABASE_URL,
     maxOpenPositions: env.MAX_OPEN_POSITIONS ? parseInt(env.MAX_OPEN_POSITIONS, 10) : undefined,
-    maxPositionSizePct: env.MAX_POSITION_SIZE_PCT ? parseFloat(env.MAX_POSITION_SIZE_PCT) : undefined,
+    maxPositionSizePct: env.MAX_POSITION_SIZE_PCT
+      ? parseFloat(env.MAX_POSITION_SIZE_PCT)
+      : undefined,
     dailyTradeLimit: env.DAILY_TRADE_LIMIT ? parseInt(env.DAILY_TRADE_LIMIT, 10) : undefined,
     maxDrawdownPct: env.MAX_DRAWDOWN_PCT ? parseFloat(env.MAX_DRAWDOWN_PCT) : undefined,
     simStartingBalance: env.SIM_STARTING_BALANCE ? parseFloat(env.SIM_STARTING_BALANCE) : undefined,

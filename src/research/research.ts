@@ -8,13 +8,7 @@
  */
 
 import type { MarketDataService, Bar, Timeframe } from "../market/market.js";
-import {
-  sma,
-  rsi,
-  smaCrossover,
-  rsiSignal,
-  type Signal,
-} from "./indicators.js";
+import { sma, rsi, smaCrossover, rsiSignal, type Signal } from "./indicators.js";
 
 // ── Types ───────────────────────────────────────────────────────
 
@@ -87,9 +81,7 @@ export class ResearchService {
     }
 
     // Build summary
-    const parts: string[] = [
-      `${symbol} at $${lastPrice.toFixed(2)}`,
-    ];
+    const parts: string[] = [`${symbol} at $${lastPrice.toFixed(2)}`];
     if (sma20 !== null) parts.push(`SMA20=$${sma20.toFixed(2)}`);
     if (sma50 !== null) parts.push(`SMA50=$${sma50.toFixed(2)}`);
     if (rsi14 !== null) parts.push(`RSI14=${rsi14.toFixed(1)}`);
@@ -131,7 +123,11 @@ export class ResearchService {
   /**
    * Get the latest bars for a symbol without computing indicators.
    */
-  async getBars(symbol: string, timeframe: Timeframe = "1Day", range: string = "1m"): Promise<Bar[]> {
+  async getBars(
+    symbol: string,
+    timeframe: Timeframe = "1Day",
+    range: string = "1m",
+  ): Promise<Bar[]> {
     return this.marketData.getBars(symbol, timeframe, range);
   }
 }

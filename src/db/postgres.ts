@@ -47,16 +47,17 @@ class PostgresClient implements DbClient {
     const pgSql = convertPlaceholders(sql.replace(/\{now\}/g, "NOW()"), "postgres");
     if (this.verbose) console.log("[postgres] get:", pgSql, params);
     const result = await this.client.query(pgSql, params as unknown[]);
-    return result.rows[0] as T | null ?? null;
+    return (result.rows[0] as T | null) ?? null;
   }
 }
 
 /**
  * Open a Postgres connection and run migrations.
  */
-export async function openPostgresDatabase(
-  config: { url: string; verbose?: boolean },
-): Promise<DbClient> {
+export async function openPostgresDatabase(config: {
+  url: string;
+  verbose?: boolean;
+}): Promise<DbClient> {
   const pool = new Pool({ connectionString: config.url });
   const client = await pool.connect();
 
