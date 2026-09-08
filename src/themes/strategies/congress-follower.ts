@@ -138,7 +138,7 @@ export class CongressFollowerStrategy implements ThemeStrategy {
         continue;
       }
 
-      const qty = Math.floor(maxAllocation / price);
+      const qty = maxAllocation / price;
       if (qty <= 0) {
         errors.push(`Insufficient allocation for ${signal.symbol} at $${price}`);
         continue;

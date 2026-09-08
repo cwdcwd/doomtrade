@@ -135,7 +135,7 @@ export class AgentDrivenStrategy implements ThemeStrategy {
 
       // Calculate quantity from allocation
       const maxAllocation = equity * (config.maxAllocationPct / 100);
-      const qty = signal.suggestedQuantity ?? Math.floor(maxAllocation / price);
+      const qty = signal.suggestedQuantity ?? maxAllocation / price;
       if (qty <= 0) {
         errors.push(`Insufficient allocation for ${signal.symbol}`);
         continue;

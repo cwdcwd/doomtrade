@@ -220,7 +220,7 @@ export class MomentumRotationStrategy implements ThemeStrategy {
           continue;
         }
 
-        const qty = Math.floor(budget / price);
+        const qty = budget / price;
         if (qty <= 0) {
           errors.push(`Insufficient allocation for ${signal.symbol} at $${price}`);
           continue;
