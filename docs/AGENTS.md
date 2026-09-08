@@ -14,6 +14,7 @@ graph TB
         ENGINE[AgentTradeEngine<br/>per-agent risk checks]
         PIPE[AgentTradingPipeline<br/>autonomous execution]
         COORD[AgentCoordinator<br/>A2A communication]
+        A2ACOORD[A2ATradingCoordinator<br/>multi-agent orchestration]
     end
 
     DB[(Database)]
@@ -27,6 +28,8 @@ graph TB
     PIPE -->|execute| ENGINE
     COORD -->|submitDecision| DB
     COORD -->|notify peer| A2A
+    A2ACOORD -->|researcher/validator/executor| PIPE
+    A2ACOORD -->|execute trades| EXCH
 ```
 
 ## Core Components
@@ -135,14 +138,70 @@ new AgentTradingPipeline({
 });
 ```
 
-**`runCycle()`**: For each active agent:
-1. Get the agent's assigned strategy from the strategies map
-2. Build a ThemeContext with the agent's exchange
-3. Call `strategy.evaluate(ctx, themeConfig)` where themeConfig is derived from agent settings
-4. Process resulting signals → create decisions → execute via AgentTradeEngine
-5. Record evaluation
+**`runCycle()`**: For each active agent, evaluates their assigned strategy, generates signals, creates decisions, and executes trades via AgentTradeEngine.
+
+**`runAgentCycle(agentId, agentName, strategyType)`**: Evaluate a single agent. Ensures a theme row exists in the `themes` table (FK target for `theme_signals`), builds a `ThemeContext` with the agent's `AgentExchange` passed as `ctx.exchange`, and runs the strategy. Allocation limits set to 99% for per-agent trading (leaves room for fees).
 
 **Default universe**: `["BTC/USDT", "ETH/USDT", "SOL/USDT", "XRP/USDT", "ADA/USDT", "DOGE/USDT", "AVAX/USDT"]`
+
+### A2ATradingCoordinator (`src/integration/a2a-trading-coordinator.ts`)
+
+Multi-agent orchestration with role-based trading flow. Coordinates three agents in a research-validate-execute pipeline.
+
+```mermaid
+flowchart TD
+    A[runCycle triggered] --> B[Step 1: Researcher<br/>Doom evaluates strategy]
+    B --> C[Extract signals from<br/>researcher's recent trades]
+    C --> D{Signals found?}
+    D -- no --> E[Return empty cycle]
+    D -- yes --> F[Step 2: Validator<br/>Kangbot reviews signals]
+    F --> G{Buy signals: cost within<br/>20% of validator equity?}
+    G -- yes --> H[Approve]
+    G -- no --> I[Reject]
+    H --> J[Step 3: Executor<br/>ThanosBot executes approved trades]
+    I --> J
+    J --> K[Run executor's own<br/>strategy cycle]
+    K --> L[Return A2ACycleResult]
+```
+
+**Roles** (configurable, defaults shown):
+- **Researcher** (Doom): Evaluates assigned strategy, generates trade signals. Signals extracted from recent trades (last 5) or existing positions.
+- **Validator** (Kangbot): Reviews each signal. Sells always approved (risk management). Buys approved if cost is within 20% of validator's equity. Holds always approved.
+- **Executor** (ThanosBot): Executes approved trades via `AgentExchange.placeOrder()`, then runs its own strategy cycle.
+
+**Key types**:
+```typescript
+interface A2ASignalMessage {
+  symbol: string;
+  action: "buy" | "sell" | "hold";
+  suggestedQuantity?: number;
+  priceAtSignal?: number;
+  reason: string;
+  confidence: number;
+}
+
+interface A2AValidationResult {
+  symbol: string;
+  action: "buy" | "sell" | "hold";
+  approved: boolean;
+  reason: string;
+  adjustedQuantity?: number;
+}
+
+interface A2ACycleResult {
+  researcher: string;
+  validator: string;
+  executor: string;
+  signals: A2ASignalMessage[];
+  validations: A2AValidationResult[];
+  executedTrades: AgentTradeResult | null;
+  researcherResult: AgentTradeResult | null;
+  executorResult: AgentTradeResult | null;
+  errors: string[];
+}
+```
+
+**API**: `POST /api/agents/a2a-cycle` triggers a full cycle.
 
 ### AgentCoordinator (`src/integration/agent-integration.ts`)
 
@@ -191,7 +250,7 @@ Seeded on boot in `src/index.ts`:
 | --- | --- | --- | --- |
 | Doom | momentum-rotation | $100,000 | Screens crypto universe for momentum signals, holds top 5 |
 | Kangbot | congress-follower | $100,000 | Mirrors congressional trade disclosures (Bargo API) |
-| ThanosBot | agent-driven | $100,000 | Delegates to AI agent via A2A for trading signals |
+| ThanosBot | momentum-rotation | $100,000 | Screens crypto universe for momentum (was agent-driven) |
 
 ## Agent Trade Execution Flow
 
@@ -285,13 +344,18 @@ All agent endpoints are under `/api/agents` and require authentication.
 | Method | Path | Description |
 | --- | --- | --- |
 | GET | `/api/agents` | List all agents with portfolio summaries |
+| POST | `/api/agents` | Register a new agent |
 | GET | `/api/agents/:id` | Agent details |
+| PATCH | `/api/agents/:id` | Update agent (strategy, active) |
+| DELETE | `/api/agents/:id` | Deactivate agent |
 | GET | `/api/agents/:id/portfolio` | Portfolio snapshot (cash, equity, positions, P&L) |
 | GET | `/api/agents/:id/trades` | Trade history (query: limit, offset) |
 | GET | `/api/agents/:id/positions` | Open positions |
 | GET | `/api/agents/:id/analytics` | Performance analytics (win rate, Sharpe, drawdown) |
 | GET | `/api/agents/leaderboard` | Ranked by total return % |
 | POST | `/api/agents/:id/evaluate` | Run agent's assigned strategy once |
+| POST | `/api/agents/a2a-cycle` | Run full multi-agent A2A trading cycle |
+| POST | `/admin/reset` | Reset all sim data (requires `confirm: "WIPE_ALL_DATA"`) |
 
 **Example: Get leaderboard**
 ```bash

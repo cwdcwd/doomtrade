@@ -244,6 +244,8 @@ All configuration is loaded from environment variables and validated with Zod at
 | `SIM_STARTING_BALANCE` | number | `100000` | Sim mode starting cash ($100K) |
 | `SIM_FEE_PCT` | number | `0.1` | Sim fee percentage (0.1 = 0.1%) |
 | `REDIS_URL` | string | `""` | Redis URL for BullMQ theme scheduling |
+| `A2A_ENDPOINT` | string | `""` | A2A endpoint URL for agent-driven strategy (LiteLLM gateway) |
+| `A2A_TOKEN` | string | `""` | A2A bearer token (falls back to `LITELLM_GATEWAY_API_KEY`) |
 | `DOOMTRADE_API_KEY` | string | `""` | API key for auth (empty = no auth) |
 
 ### Key Configuration Notes
@@ -375,7 +377,7 @@ npm start      # compiled JS
 
 ## Testing
 
-22 test files, 405+ tests, all using **vitest** with in-memory SQLite for isolation.
+23 test files, 414+ tests, all using **vitest** with in-memory SQLite for isolation.
 
 ### Running Tests
 
@@ -396,6 +398,7 @@ npx vitest
 | --- | --- | --- |
 | `api.test.ts` | 35 | API endpoints (decisions, trades, portfolio, mode toggle) |
 | `agent-api.test.ts` | 10 | Agent API endpoints |
+| `a2a-trading-coordinator.test.ts` | 10 | A2ATradingCoordinator multi-agent cycle |
 | `agent-exchange.test.ts` | 12 | AgentExchange (per-agent executor) |
 | `agent-integration.test.ts` | 9 | AgentCoordinator A2A integration |
 | `agent-driven.test.ts` | 4 | AgentDriven strategy |

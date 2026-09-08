@@ -38,7 +38,7 @@ DoomTrade is an agent-managed trading platform where AI agents (Doom, Kangbot, T
 - **Automated strategies**: Congress follower, momentum rotation, and agent-driven strategies via the Themes framework
 - **Technical research**: SMA, EMA, RSI indicators with buy/sell/neutral signals
 - **A2A integration**: Agents communicate and coordinate via Agent-to-Agent protocol
-- **405+ tests**: Full test coverage across all subsystems
+- **414+ tests**: Full test coverage across all subsystems
 
 ### Architecture at a Glance
 
@@ -72,7 +72,7 @@ DoomTrade
 | --- | --- | --- |
 | Doom | momentum-rotation | $100,000 |
 | Kangbot | congress-follower | $100,000 |
-| ThanosBot | agent-driven | $100,000 | Delegates to AI agent via A2A for signals |
+| ThanosBot | momentum-rotation | $100,000 | Screens crypto universe for momentum (was agent-driven) |
 
 ### CLI Tools
 

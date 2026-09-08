@@ -115,13 +115,17 @@ Enforces allocation limits before placing trades.
 
 ```typescript
 function isWithinAllocationLimit(
-  orderNotional: number,
-  currentBalance: number,
+  positions: Position[],
+  equity: number,
+  maxTotalAllocationPct: number,    // Total limit (e.g. 40%)
   maxAllocationPct: number,    // Per-position limit (e.g. 5%)
-  totalAllocated: number,
-  maxTotalAllocationPct: number, // Total limit (e.g. 40%)
-): { withinLimit: boolean; reason?: string }
+  buyValue: number,             // Proposed buy's total value
+): { allowed: boolean; reason?: string }
 ```
+
+**Boundary tolerance**: $0.01 tolerance prevents off-by-one rejections at the exact boundary. Per-agent trading uses 99% max allocation to leave room for fees.
+
+**Fractional shares**: All strategies compute quantity as raw division (`maxAllocation / price`) without `Math.floor()`, supporting fractional quantities for crypto and fractional shares.
 
 ## Strategy Interface
 
@@ -133,10 +137,18 @@ interface ThemeStrategy {
 
 interface ThemeContext {
   db: Database;
+  marketData: MarketDataService;
   decisionStore: DecisionStore;
   tradeEngine: TradeEngine;
   portfolio: Portfolio;
-  marketData: MarketDataService;
+  getEquity(): Promise<number>;
+  getPositions(): Promise<Position[]>;
+  getQuote(symbol: string): Promise<number>;
+  themeId: string;
+  /** Optional executor for trade execution. When provided (by the agent
+   *  pipeline), strategies should use this instead of creating a
+   *  ThemeSubAccount. Falls back to ThemeSubAccount when absent (theme runner). */
+  exchange?: Executor;
 }
 ```
 

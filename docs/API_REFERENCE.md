@@ -688,6 +688,59 @@ Get agents ranked by total return percentage (descending).
 
 ### POST /api/agents/:id/evaluate
 
-Run the agent's assigned strategy once.
+Run the agent's assigned strategy once. Returns signals, trades, equity before/after, and P&L change.
 
-**Response** `200` — `{mode, result: ThemeEvaluationResult}`
+**Response** `200`
+```json
+{
+  "agentId": "uuid",
+  "agentName": "Doom",
+  "strategy": "momentum-rotation",
+  "signals": [...],
+  "trades": [...],
+  "errors": [],
+  "equityBefore": 100000,
+  "equityAfter": 102500,
+  "pnlChange": 2500
+}
+```
+
+### POST /api/agents
+
+Register a new agent.
+
+**Request Body**: `{name: string, startingBalance?: number, strategy?: string}`
+
+### PATCH /api/agents/:id
+
+Update an agent's strategy or active status.
+
+**Request Body**: `{strategy?: string, active?: boolean}`
+
+### DELETE /api/agents/:id
+
+Deactivate an agent (sets `active = 0`).
+
+### POST /api/agents/a2a-cycle
+
+Run a full multi-agent A2A trading cycle (researcher -> validator -> executor).
+
+**Response** `200`
+```json
+{
+  "researcher": "Doom",
+  "validator": "Kangbot",
+  "executor": "ThanosBot",
+  "signals": [...],
+  "validations": [...],
+  "researcherResult": {...},
+  "executorResult": {...},
+  "errors": []
+}
+```
+
+### POST /admin/reset
+
+Reset all sim data. Requires confirmation.
+
+**Request Body**: `{"confirm": "WIPE_ALL_DATA"}`

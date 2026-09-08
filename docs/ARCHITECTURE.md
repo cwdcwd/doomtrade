@@ -149,6 +149,8 @@ Zod-validated environment variable loading. Invalid config crashes at startup (f
 | `SIM_STARTING_BALANCE` | number | 100000 | Sim mode starting cash |
 | `SIM_FEE_PCT` | number | 0.1 | Sim fee percentage (0.1 = 0.1%) |
 | `REDIS_URL` | string | "" | Redis URL for BullMQ theme scheduling |
+| `A2A_ENDPOINT` | string | "" | A2A endpoint URL for agent-driven strategy (LiteLLM gateway) |
+| `A2A_TOKEN` | string | "" | A2A bearer token (falls back to `LITELLM_GATEWAY_API_KEY`) |
 | `DOOMTRADE_API_KEY` | string | "" | API key for authentication (empty = no auth) |
 
 ### 3. Decision Log (`src/decision/`)
@@ -313,7 +315,7 @@ flowchart LR
 - **ThemeRunner**: Manages lifecycle, scheduling (cron via node-cron, interval via setInterval), and strategy registration
 - **ThemeStore**: DB persistence for themes, signal deduplication (via `signal_hash`), and evaluation history
 - **ThemeSubAccount**: Independent paper trading portfolio per theme with its own balance, positions, and orders
-- **AllocationCheck**: Enforces `maxAllocationPct` (per-position) and `maxTotalAllocationPct` (total theme allocation)
+- **AllocationCheck**: Enforces `maxAllocationPct` (per-position) and `maxTotalAllocationPct` (total theme allocation). Boundary tolerance of $0.01 prevents off-by-one rejections. Per-agent trading uses 99% max to leave room for fees.
 
 **Built-in strategies**: CongressFollower (Bargo API), MomentumRotation (SMA/RSI screening), AgentDriven (A2A)
 **Signal sources**: congress-trades, momentum-screen, agent-signal, manual-list
@@ -349,8 +351,9 @@ graph TB
 - **AgentTradeEngine**: Per-agent risk checks scoped to agent's own equity
 - **AgentTradingPipeline**: Autonomous per-agent strategy execution on a schedule
 - **AgentCoordinator**: A2A communication via `@cwdcwd/agent-bridge`. `submitDecision()` (creates decision + notifies peer), `executeDecision()` (executes + notifies outcome)
+- **A2ATradingCoordinator**: Multi-agent orchestration with role-based flow: researcher generates signals, validator reviews/approves, executor trades. Accessible via `POST /api/agents/a2a-cycle`.
 
-**Default agents** (seeded on boot): Doom (momentum-rotation), Kangbot (congress-follower), ThanosBot (agent-driven)
+**Default agents** (seeded on boot): Doom (momentum-rotation), Kangbot (congress-follower), ThanosBot (momentum-rotation, was agent-driven)
 
 See [AGENTS.md](AGENTS.md) for full documentation.
 
