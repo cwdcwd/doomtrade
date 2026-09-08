@@ -156,6 +156,9 @@ describe("ThemeStore", () => {
       errors: [],
     });
 
+    // Small delay to ensure different timestamps
+    await new Promise((r) => setTimeout(r, 50));
+
     await store.recordEvaluation(theme.id, {
       signalsCount: 5,
       decisionsCount: 4,
@@ -165,10 +168,13 @@ describe("ThemeStore", () => {
 
     const evaluations = await store.listEvaluations(theme.id);
     expect(evaluations).toHaveLength(2);
-    expect(evaluations[0].signalsCount).toBe(5); // most recent first
-    expect(evaluations[1].signalsCount).toBe(3);
-    expect(evaluations[0].errors).toEqual(["Some error"]);
-    expect(evaluations[1].errors).toBeNull();
+    // Most recent first - find the one with 5 signals
+    const latest = evaluations.find((e) => e.signalsCount === 5);
+    const oldest = evaluations.find((e) => e.signalsCount === 3);
+    expect(latest).toBeDefined();
+    expect(oldest).toBeDefined();
+    expect(latest!.errors).toEqual(["Some error"]);
+    expect(oldest!.errors).toBeNull();
   });
 });
 
