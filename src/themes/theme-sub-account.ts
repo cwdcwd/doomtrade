@@ -11,7 +11,7 @@
 import { randomUUID } from "node:crypto";
 import type { Database } from "../db/database.js";
 import { execAll, execGet, execRun, convertPlaceholders } from "../db/database.js";
-import type { Position, Balance, OrderRequest, OrderResult, OrderStatus } from "../executor/executor.js";
+import type { Position, Balance, OrderRequest, OrderResult, OrderStatus, Executor } from "../executor/executor.js";
 
 interface SubPositionRow {
   theme_id: string;
@@ -29,7 +29,8 @@ interface SubBalanceRow {
   starting_balance: number;
 }
 
-export class ThemeSubAccount {
+export class ThemeSubAccount implements Executor {
+  readonly name = "theme-sub-account";
   private priceCache: Map<string, number> = new Map();
   private getCurrentPrice: (symbol: string) => number | null;
   private feeRate: number;
@@ -114,6 +115,13 @@ export class ThemeSubAccount {
         marketValue,
       };
     });
+  }
+
+  /**
+   * Cancel an order. Sub-account orders fill immediately, so nothing to cancel.
+   */
+  async cancelOrder(_id: string): Promise<boolean> {
+    return false;
   }
 
   /**

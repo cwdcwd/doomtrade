@@ -36,6 +36,10 @@ export interface ThemeContext {
   getQuote(symbol: string): Promise<number>;
   /** Theme ID for attribution */
   themeId: string;
+  /** Optional executor for trade execution. When provided (by the agent
+   *  pipeline), strategies should use this instead of creating a
+   *  ThemeSubAccount. Falls back to ThemeSubAccount when absent (theme runner). */
+  exchange?: import("../executor/executor.js").Executor;
 }
 
 /**

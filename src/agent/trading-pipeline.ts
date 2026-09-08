@@ -120,11 +120,8 @@ export class AgentTradingPipeline {
     const balanceBefore = await exchange.getBalance();
     const equityBefore = balanceBefore.equity;
 
-    // Ensure the theme sub-account is initialized with the agent's capital.
-    // Strategies like momentum-rotation create a ThemeSubAccount using
-    // config.id as the theme ID — it must exist in theme_subaccounts or
-    // the strategy bails out with "no capital allocated".
-    await this.ensureSubAccount(agentId, agentName, strategyType, equityBefore);
+    // Ensure a themes row exists (FK target for theme_signals dedup table)
+    await this.ensureThemeRow(agentId, agentName, strategyType);
 
     // Build the theme config for this agent
     const config: ThemeConfig = {
@@ -194,6 +191,7 @@ export class AgentTradingPipeline {
       tradeEngine: null as any,
       portfolio: null as any,
       themeId: agentId,
+      exchange, // Strategies use this for trade execution (AgentExchange)
       getEquity: async () => {
         const bal = await exchange.getBalance();
         return bal.equity;
@@ -239,16 +237,12 @@ export class AgentTradingPipeline {
   }
 
   /**
-   * Ensure the theme sub-account exists with the agent's current equity.
-   * The theme_subaccounts table has a FK on theme_id → themes(id), so we
-   * must also ensure a corresponding theme row exists for the agent.
-   * Idempotent — if it already exists, the balance is updated to match
-   * the agent's actual equity (syncing the sub-account to reality).
+   * Ensure a themes row exists for the agent (FK target for theme_signals).
+   * Does NOT create a theme_subaccount — strategies use ctx.exchange
+   * (AgentExchange) when available, which writes to agent_* tables.
    */
-  private async ensureSubAccount(themeId: string, agentName: string, strategy: string, equity: number): Promise<void> {
+  private async ensureThemeRow(themeId: string, agentName: string, strategy: string): Promise<void> {
     const db = this.config.db;
-
-    // Ensure a themes row exists (FK target for theme_subaccounts)
     const themeCheckSql = convertPlaceholders(
       "SELECT id FROM themes WHERE id = ?",
       db.backend,
@@ -257,33 +251,10 @@ export class AgentTradingPipeline {
     if (!themeExists) {
       const themeInsertSql = convertPlaceholders(
         `INSERT INTO themes (id, name, strategy, mode, schedule, max_allocation_pct, max_total_allocation_pct, max_positions, allocated_capital, params, enabled)
-         VALUES (?, ?, ?, 'sim', '{"type":"manual"}', 20, 80, 10, ?, '{}', 1)`,
+         VALUES (?, ?, ?, 'sim', '{"type":"manual"}', 99, 99, 10, 0, '{}', 1)`,
         db.backend,
       );
-      await execRun(db, themeInsertSql, [themeId, agentName, strategy, equity]);
-    }
-
-    // Ensure the sub-account row exists
-    const checkSql = convertPlaceholders(
-      "SELECT theme_id FROM theme_subaccounts WHERE theme_id = ?",
-      db.backend,
-    );
-    const existing = await execGet<{ theme_id: string }>(db, checkSql, [themeId]);
-
-    if (!existing) {
-      const insertSql = convertPlaceholders(
-        `INSERT INTO theme_subaccounts (theme_id, balance, peak_balance, starting_balance)
-         VALUES (?, ?, ?, ?)`,
-        db.backend,
-      );
-      await execRun(db, insertSql, [themeId, equity, equity, equity]);
-    } else {
-      // Sync the sub-account balance to the agent's actual cash
-      const updateSql = convertPlaceholders(
-        `UPDATE theme_subaccounts SET balance = ? WHERE theme_id = ?`,
-        db.backend,
-      );
-      await execRun(db, updateSql, [equity, themeId]);
+      await execRun(db, themeInsertSql, [themeId, agentName, strategy]);
     }
   }
 

@@ -96,8 +96,9 @@ export class CongressFollowerStrategy implements ThemeStrategy {
       };
     }
 
-    // Get sub-account for execution — use context's getQuote for price resolution
-    const subAccount = new ThemeSubAccount(ctx.db, config.id, {
+    // Get sub-account for execution — use ctx.exchange (AgentExchange)
+    // when provided by the agent pipeline, otherwise fall back to ThemeSubAccount.
+    const subAccount = ctx.exchange ?? new ThemeSubAccount(ctx.db, config.id, {
       getCurrentPrice: (symbol: string) => {
         // Synchronous fallback — will be overridden by async price in placeOrder
         // if the order has a limitPrice. For market orders, we use priceAtSignal.

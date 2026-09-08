@@ -55,8 +55,10 @@ export class AgentDrivenStrategy implements ThemeStrategy {
       };
     }
 
-    // Get sub-account for price/equity context
-    const subAccount = new ThemeSubAccount(ctx.db, config.id);
+    // Get sub-account for price/equity context — use ctx.exchange
+    // (AgentExchange) when provided by the agent pipeline, otherwise
+    // fall back to ThemeSubAccount.
+    const subAccount = ctx.exchange ?? new ThemeSubAccount(ctx.db, config.id);
 
     let equity = 0;
     try {

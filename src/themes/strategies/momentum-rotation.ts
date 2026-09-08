@@ -117,7 +117,9 @@ export class MomentumRotationStrategy implements ThemeStrategy {
     const selectedSymbols = new Set(selected.map((s) => s.symbol));
 
     // ── Set up sub-account for order execution ──────────────────
-    const subAccount = new ThemeSubAccount(ctx.db, config.id, {
+    // Use ctx.exchange (AgentExchange) when provided by the agent pipeline,
+    // otherwise fall back to a ThemeSubAccount (theme runner).
+    const subAccount = ctx.exchange ?? new ThemeSubAccount(ctx.db, config.id, {
       getCurrentPrice: () => null,
     });
 

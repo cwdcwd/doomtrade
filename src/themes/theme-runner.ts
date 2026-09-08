@@ -300,6 +300,7 @@ export class ThemeRunner {
       tradeEngine: this.opts.tradeEngine,
       portfolio: this.opts.portfolio,
       themeId,
+      exchange: subAccount, // ThemeSubAccount implements Executor
       getEquity: async () => {
         try {
           const bal = await subAccount.getBalance();
