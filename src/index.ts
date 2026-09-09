@@ -208,14 +208,22 @@ async function main() {
 
   const app = express();
 
+  // Railway proxies requests (X-Forwarded-For) — trust exactly one hop so
+  // express-rate-limit keys by the real client IP instead of the proxy's IP.
+  // Without this, ALL clients share a single rate-limit bucket (ERR_ERL_UNEXPECTED_X_FORWARDED_FOR).
+  app.set("trust proxy", 1);
+
   // Middleware
   app.use(helmet());
   app.use(express.json());
 
-  // Rate limiting — 100 requests per 15 minutes per IP
+  // Rate limiting — 300 requests per 15 minutes per IP.
+  // 100 was too small: the dashboard fast-refreshes agents every 10s (~90 req/15min),
+  // and all fleet devices (3 Pis + dashboard) share one public IP, so agent cron
+  // cycles were getting 429s on top of dashboard polling.
   const apiLimiter = rateLimit({
     windowMs: 15 * 60 * 1000,
-    max: 100,
+    max: 300,
     standardHeaders: true,
     legacyHeaders: false,
     message: { error: "Too many requests, please try again later" },
