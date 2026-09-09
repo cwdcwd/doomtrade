@@ -300,6 +300,23 @@ async function refresh() {
   } catch(e) {
     dot.classList.add('error');
     document.getElementById('ts').textContent = 'Error: ' + e.message;
+    // 401 = no/invalid API key stored — guide the user instead of hanging on "Loading…"
+    if (String(e.message).startsWith('401')) {
+      const hasKey = !!localStorage.getItem('doomtrade_api_key');
+      const grid = document.getElementById('grid');
+      grid.innerHTML = `
+        <div style="grid-column:1/-1;text-align:center;padding:48px 16px">
+          <div style="font-size:15px;font-weight:700;margin-bottom:8px">API key required</div>
+          <div style="color:var(--muted);font-size:12px;margin-bottom:16px;max-width:420px;margin-inline:auto">
+            ${hasKey
+              ? 'The stored API key was rejected (HTTP 401). It may have changed — set it again.'
+              : 'This dashboard now requires the DoomTrade API key (it is no longer embedded in the page). Click below to provide it once; it is stored in this browser only.'}
+          </div>
+          <button class="btn" onclick="setApiKey()" style="margin:0 auto">🔑 ${hasKey ? 'Update API Key' : 'Set API Key'}</button>
+        </div>`;
+      const bar = document.getElementById('market-bar');
+      bar.innerHTML = '<div style="color:var(--dim);padding:10px 14px;font-size:11px">Market data requires the API key</div>';
+    }
   }
 }
 
