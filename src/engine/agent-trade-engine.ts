@@ -11,7 +11,7 @@
  */
 
 import type { Database } from "../db/database.js";
-import { execGet, execAll, convertPlaceholders } from "../db/database.js";
+import { execGet, execAll, execRun, convertPlaceholders } from "../db/database.js";
 import type { AgentManager } from "../agent/agent-manager.js";
 import type { AgentExchange, AgentOrderRow } from "../executor/agent-exchange.js";
 import type { Config } from "../config.js";
@@ -135,6 +135,7 @@ export class AgentTradeEngine {
     if (!riskPassed) {
       // Log a rejected order in agent_orders
       await this.logRejectedOrder(exchange, {
+        agentId,
         decisionId: decision.id,
         symbol: decision.symbol,
         side: decision.action as "buy" | "sell",
@@ -309,8 +310,9 @@ export class AgentTradeEngine {
   // ── Order logging ──────────────────────────────────────────────
 
   private async logRejectedOrder(
-    exchange: AgentExchange,
+    _exchange: AgentExchange,
     params: {
+      agentId: string;
       decisionId: string;
       symbol: string;
       side: "buy" | "sell";
@@ -319,8 +321,6 @@ export class AgentTradeEngine {
       error: string;
     },
   ): Promise<void> {
-    // AgentExchange handles filled orders internally; for rejected orders
-    // we insert directly into agent_orders with status='rejected'
     const { randomUUID } = await import("node:crypto");
     const id = randomUUID();
     const timestamp = new Date().toISOString();
@@ -330,19 +330,17 @@ export class AgentTradeEngine {
        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, 0, 0, 'rejected', ?, ?)`,
       this.db.backend,
     );
-    // We need the agent_id — extract from exchange (it's private, but we can
-    // use the manager to look it up). Actually, the exchange was obtained
-    // from the manager with a specific agentId, so we pass it through.
-    // Since we can't access exchange.agentId (private), we'll use the
-    // decision's agent field or pass agentId separately.
-    // For now, we'll skip this direct insert — the risk check result is
-    // returned to the caller and can be logged via the API response.
-    // This is a lightweight rejection log — the exchange handles filled orders.
-    void exchange;
-    void sql;
-    void id;
-    void timestamp;
-    void params;
+    await execRun(this.db, sql, [
+      id,
+      params.agentId,
+      params.decisionId,
+      params.symbol,
+      params.side,
+      params.orderType,
+      params.quantity,
+      params.error,
+      timestamp,
+    ]);
   }
 
   // ── Query helpers ──────────────────────────────────────────────

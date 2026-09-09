@@ -202,6 +202,7 @@
     <button class="btn" onclick="evalAll()" id="btn-eval">▶ Evaluate All</button>
     <div class="toolbar-spacer"></div>
     <span class="toolbar-info" id="info"></span>
+    <button class="btn" onclick="setApiKey()" id="btn-key" title="Set the API key used for dashboard API calls">🔑 API Key</button>
   </div>
 
   <!-- Market ticker -->
@@ -229,8 +230,20 @@ function pnlC(v) { return v >= 0 ? 'pos' : 'neg'; }
 
 function hdrs() {
   const h = {};
-  if (window.DOOMTRADE_API_KEY) h['Authorization'] = 'Bearer ' + window.DOOMTRADE_API_KEY;
+  const key = localStorage.getItem('doomtrade_api_key');
+  if (key) h['Authorization'] = 'Bearer ' + key;
   return h;
+}
+// Prompt for the API key (stored client-side only — the server no longer
+// injects it into the page). Cancel clears the stored key.
+function setApiKey() {
+  const cur = localStorage.getItem('doomtrade_api_key') || '';
+  const v = prompt('DoomTrade API key (leave blank + OK to clear):', cur);
+  if (v === null) return;
+  if (v.trim()) localStorage.setItem('doomtrade_api_key', v.trim());
+  else localStorage.removeItem('doomtrade_api_key');
+  toast(v.trim() ? 'API key saved' : 'API key cleared', true);
+  refresh();
 }
 async function api(path) {
   const r = await fetch(path, { headers: hdrs() });

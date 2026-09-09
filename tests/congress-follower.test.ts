@@ -486,3 +486,316 @@ describe("CongressFollowerStrategy", () => {
     vi.restoreAllMocks();
   });
 });
+// ── Regression tests: fixes for the Kangbot lockup (2026-09-09) ──
+
+describe("CongressFollowerStrategy — regression fixes", () => {
+  /** Build a context backed by a real ThemeSubAccount with a price provider. */
+  function subCtx(
+    themeId: string,
+    sub: ThemeSubAccount,
+    prices: Record<string, number> = { NVDA: 120, MSFT: 500, INTC: 120, AAPL: 200, BE: 120 },
+  ): ThemeContext {
+    const priceOf = (s: string) => prices[s] ?? 100;
+    return {
+      db,
+      marketData: { getQuote: async (s: string) => ({ price: priceOf(s) }) } as any,
+      decisionStore: {} as any,
+      tradeEngine: {} as any,
+      portfolio: {} as any,
+      themeId,
+      getEquity: async () => (await sub.getBalance()).equity,
+      getPositions: async () => sub.getPositions(),
+      getQuote: async (s: string) => priceOf(s),
+    };
+  }
+
+  function pelosiConfig(id: string, overrides: Partial<ThemeConfig> = {}): ThemeConfig {
+    return {
+      id,
+      name: "Pelosi Follower",
+      strategy: "congress-follower",
+      mode: "sim",
+      schedule: { type: "manual" },
+      maxAllocationPct: 25,
+      maxTotalAllocationPct: 95,
+      maxPositions: 10,
+      params: { politician: "Pelosi" },
+      enabled: true,
+      allocatedCapital: 1_000,
+      ...overrides,
+    };
+  }
+
+  /** Mock a fresh Bargo purchase disclosure. */
+  function mockPurchase(opts: { ticker?: string; price?: number; txDate?: string; discDate?: string } = {}) {
+    const now = Date.now();
+    const txDate = opts.txDate ?? new Date(now - 7 * 86400_000).toISOString().slice(0, 10);
+    const discDate = opts.discDate ?? new Date(now - 1 * 86400_000).toISOString().slice(0, 10);
+    return {
+      trades: [
+        {
+          member: "Nancy Pelosi",
+          member_slug: "nancy-pelosi",
+          chamber: "house",
+          state: "CA",
+          ticker: opts.ticker ?? "NVDA",
+          asset: "NVIDIA",
+          type: "purchase",
+          amount_range: "$1,001 - $15,000",
+          transaction_date: txDate,
+          disclosure_date: discDate,
+          est_price: opts.price ?? 120.0,
+          recent_price: opts.price ?? 120.0,
+          perf_pct: 0,
+          outcome: null,
+          filing_portal: "https://disclosures-clerk.house.gov",
+        },
+      ],
+      page: 0,
+      limit: 100,
+      count: 1,
+    };
+  }
+
+  it("records rejected signals as processed so they don't re-fire every cycle", async () => {
+    const store = new ThemeStore(db);
+    const theme = await store.create({
+      name: "Regress Reject",
+      strategy: "congress-follower",
+      schedule: { type: "manual" },
+      params: { politician: "Pelosi" },
+      allocatedCapital: 1_000,
+      maxAllocationPct: 25,
+    });
+
+    const sub = new ThemeSubAccount(db, theme.id, { feeRate: 0, getCurrentPrice: () => 100 });
+    await sub.initialize(1_000);
+    const ctx = subCtx(theme.id, sub);
+    const strategy = new CongressFollowerStrategy();
+
+    // Two buys of the same symbol on different dates — the second must be
+    // rejected by the single-position allocation limit (25% of equity) but
+    // still recorded as processed.
+    const payload = {
+      trades: [
+        {
+          member: "Nancy Pelosi", member_slug: "nancy-pelosi", chamber: "house", state: "CA",
+          ticker: "NVDA", asset: "NVIDIA", type: "purchase",
+          amount_range: "$1,001 - $15,000",
+          transaction_date: new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10),
+          disclosure_date: new Date(Date.now() - 1 * 86400_000).toISOString().slice(0, 10),
+          est_price: 100, recent_price: 100, perf_pct: 0, outcome: null,
+          filing_portal: "https://disclosures-clerk.house.gov",
+        },
+        {
+          member: "Nancy Pelosi", member_slug: "nancy-pelosi", chamber: "house", state: "CA",
+          ticker: "MSFT", asset: "Microsoft", type: "purchase",
+          amount_range: "$1,001 - $15,000",
+          transaction_date: new Date(Date.now() - 6 * 86400_000).toISOString().slice(0, 10),
+          disclosure_date: new Date(Date.now() - 1 * 86400_000).toISOString().slice(0, 10),
+          est_price: 500, recent_price: 500, perf_pct: 0, outcome: null,
+          filing_portal: "https://disclosures-clerk.house.gov",
+        },
+      ],
+      page: 0, limit: 100, count: 2,
+    };
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => payload } as Response);
+
+    const config = await store.getById(theme.id);
+    const r1 = await strategy.evaluate(ctx, config!);
+    // NVDA fills (250 = 25% of equity). MSFT buy (250) is rejected by the
+    // total-exposure limit (default maxTotalAllocationPct = 40 → 400 cap;
+    // 250 + 250 = 500 > 400) — exactly the Kangbot production scenario.
+    expect(r1.trades).toHaveLength(1);
+    expect(r1.errors.length).toBeGreaterThanOrEqual(1);
+    expect(r1.errors.some((e) => e.includes("Allocation limit"))).toBe(true);
+
+    // Second cycle: same disclosures — the rejected MSFT signal must NOT
+    // re-fire (it was recorded as processed at decision time, not fill time).
+    const r2 = await strategy.evaluate(ctx, config!);
+    expect(r2.signals).toHaveLength(0);
+    expect(r2.trades).toHaveLength(0);
+    expect(r2.errors).toHaveLength(0);
+
+    vi.restoreAllMocks();
+  });
+
+  it("ignores disclosures older than maxSignalAgeDays (by disclosure date)", async () => {
+    const store = new ThemeStore(db);
+    const theme = await store.create({
+      name: "Regress Age",
+      strategy: "congress-follower",
+      schedule: { type: "manual" },
+      params: { politician: "Pelosi" },
+      allocatedCapital: 1_000,
+      maxAllocationPct: 25,
+    });
+
+    const sub = new ThemeSubAccount(db, theme.id, { feeRate: 0, getCurrentPrice: () => 100 });
+    await sub.initialize(1_000);
+    const ctx = subCtx(theme.id, sub);
+    const strategy = new CongressFollowerStrategy();
+
+    // Transaction 40 days ago, disclosed 35 days ago — too old by both clocks.
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => mockPurchase({
+        ticker: "AAPL",
+        price: 200,
+        txDate: new Date(Date.now() - 40 * 86400_000).toISOString().slice(0, 10),
+        discDate: new Date(Date.now() - 35 * 86400_000).toISOString().slice(0, 10),
+      }),
+    } as Response);
+
+    const config = await store.getById(theme.id);
+    const r1 = await strategy.evaluate(ctx, config!);
+    expect(r1.signals).toHaveLength(0);
+    expect(r1.trades).toHaveLength(0);
+
+    vi.restoreAllMocks();
+  });
+
+  it("acts on recently-disclosed old trades (disclosure date is the clock)", async () => {
+    const store = new ThemeStore(db);
+    const theme = await store.create({
+      name: "Regress Fresh Disclosure",
+      strategy: "congress-follower",
+      schedule: { type: "manual" },
+      params: { politician: "Pelosi" },
+      allocatedCapital: 1_000,
+      maxAllocationPct: 25,
+    });
+
+    const sub = new ThemeSubAccount(db, theme.id, { feeRate: 0, getCurrentPrice: () => 120 });
+    await sub.initialize(1_000);
+    const ctx = subCtx(theme.id, sub);
+    const strategy = new CongressFollowerStrategy();
+
+    // Transaction 45 days ago but DISCLOSED yesterday — actionable: the
+    // market only learned of it at disclosure. (This is the Pelosi BE case.)
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => mockPurchase({
+        ticker: "BE",
+        price: 120,
+        txDate: new Date(Date.now() - 45 * 86400_000).toISOString().slice(0, 10),
+        discDate: new Date(Date.now() - 1 * 86400_000).toISOString().slice(0, 10),
+      }),
+    } as Response);
+
+    const config = await store.getById(theme.id);
+    const r1 = await strategy.evaluate(ctx, config!);
+    expect(r1.signals).toHaveLength(1);
+    expect(r1.trades).toHaveLength(1);
+    expect((r1.trades[0] as any).symbol).toBe("BE");
+    expect((r1.trades[0] as any).status).toBe("filled");
+
+    vi.restoreAllMocks();
+  });
+
+  it("mirrors a sale by selling held quantity — never a buy-sized amount", async () => {
+    const store = new ThemeStore(db);
+    const theme = await store.create({
+      name: "Regress Sell Mirror",
+      strategy: "congress-follower",
+      schedule: { type: "manual" },
+      params: { politician: "Pelosi", mirrorAction: "all" },
+      allocatedCapital: 1_000,
+      maxAllocationPct: 25,
+    });
+
+    const sub = new ThemeSubAccount(db, theme.id, { feeRate: 0, getCurrentPrice: () => 120 });
+    await sub.initialize(1_000);
+    const ctx = subCtx(theme.id, sub);
+    const strategy = new CongressFollowerStrategy();
+
+    // First: buy NVDA (fills 250/120 = 2.0833 units)
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockPurchase({ ticker: "NVDA", price: 120 }),
+    } as Response);
+    const config = await store.getById(theme.id);
+    const r1 = await strategy.evaluate(ctx, config!);
+    expect(r1.trades).toHaveLength(1);
+
+    // Then: Pelosi sells NVDA — strategy must sell the HELD quantity (2.0833),
+    // not a buy-sized amount like 250/120-ish… which would coincidentally be
+    // the same. Use a different price to prove sizing: sell at 200 → if it
+    // were buy-sized it would be 250/200 = 1.25, not 2.0833.
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        trades: [
+          {
+            member: "Nancy Pelosi", member_slug: "nancy-pelosi", chamber: "house", state: "CA",
+            ticker: "NVDA", asset: "NVIDIA", type: "sale_full",
+            amount_range: "$15,001 - $50,000",
+            transaction_date: new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10),
+            disclosure_date: new Date(Date.now() - 1 * 86400_000).toISOString().slice(0, 10),
+            est_price: 200, recent_price: 200, perf_pct: 0, outcome: null,
+            filing_portal: "https://disclosures-clerk.house.gov",
+          },
+        ],
+        page: 0, limit: 100, count: 1,
+      }),
+    } as Response);
+
+    const r2 = await strategy.evaluate(ctx, config!);
+    expect(r2.trades).toHaveLength(1);
+    const sell = r2.trades[0] as any;
+    expect(sell.side).toBe("sell");
+    expect(sell.symbol).toBe("NVDA");
+    // Held quantity, not buy-sized (1.25) — assert approximately
+    expect(sell.quantity).toBeCloseTo(2.0833, 3);
+
+    // Position fully closed
+    const positions = await sub.getPositions();
+    expect(positions.filter((p) => p.symbol === "NVDA")).toHaveLength(0);
+
+    vi.restoreAllMocks();
+  });
+
+  it("caps buy size at available cash so near-fully-deployed accounts still trade", async () => {
+    const store = new ThemeStore(db);
+    const theme = await store.create({
+      name: "Regress Cash Cap",
+      strategy: "congress-follower",
+      schedule: { type: "manual" },
+      params: { politician: "Pelosi" },
+      allocatedCapital: 1_000,
+      maxAllocationPct: 90,       // single-position limit high enough to not mask the cash cap
+      maxTotalAllocationPct: 100, // total limit high enough to expose the cash cap
+    });
+
+    // Prices: everything marks at 120 (fill price), so equity stays honest.
+    const sub = new ThemeSubAccount(db, theme.id, { feeRate: 0, getCurrentPrice: () => 120 });
+    await sub.initialize(1_000);
+    const ctx = subCtx(theme.id, sub, { NVDA: 120, INTC: 120 });
+    const strategy = new CongressFollowerStrategy();
+
+    // Pre-buy 8 INTC @ 120 = 960 → 40 cash left, equity 1000.
+    await sub.placeOrder({
+      symbol: "INTC", side: "buy", quantity: 8, orderType: "limit", limitPrice: 120,
+    } as any);
+
+    // Fresh NVDA signal: 90% of equity would be 900/120 = 7.5 units, but only
+    // ~40 cash exists. The buy must size to cash (~0.33 units), not reject.
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: true,
+      json: async () => mockPurchase({ ticker: "NVDA", price: 120 }),
+    } as Response);
+
+    const config = await store.getById(theme.id);
+    const r1 = await strategy.evaluate(ctx, config!);
+    expect(r1.errors).toHaveLength(0);
+    expect(r1.trades).toHaveLength(1);
+    const trade = r1.trades[0] as any;
+    expect(trade.symbol).toBe("NVDA");
+    expect(trade.status).toBe("filled");
+    // Cash-capped (~40/120 ≈ 0.33), not equity-sized (7.5)
+    expect(trade.quantity).toBeLessThan(0.4);
+    expect(trade.quantity).toBeGreaterThan(0.3);
+
+    vi.restoreAllMocks();
+  });
+});

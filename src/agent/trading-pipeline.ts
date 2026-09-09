@@ -55,6 +55,14 @@ export interface AgentTradeResult {
   pnlChange: number;
 }
 
+// Allocation limits for per-agent portfolios (all agents share these).
+// A single position may use at most 25% of the agent's equity, total open
+// exposure at most 95%. The previous 99/99 let the very first signal consume
+// the whole account and permanently block every later signal (the Kangbot
+// congress-follower lockup).
+export const AGENT_MAX_ALLOCATION_PCT = 25;
+export const AGENT_MAX_TOTAL_ALLOCATION_PCT = 95;
+
 export class AgentTradingPipeline {
   private config: PipelineConfig;
 
@@ -131,8 +139,8 @@ export class AgentTradingPipeline {
       strategy: strategyType,
       mode: "sim",
       schedule: { type: "manual" },
-      maxAllocationPct: 99,
-      maxTotalAllocationPct: 99,
+      maxAllocationPct: AGENT_MAX_ALLOCATION_PCT,
+      maxTotalAllocationPct: AGENT_MAX_TOTAL_ALLOCATION_PCT,
       maxPositions: 10,
       params: this.getStrategyParams(agentName, strategyType),
       enabled: true,
@@ -220,7 +228,9 @@ export class AgentTradingPipeline {
       case "congress-follower":
         return {
           politician: "Pelosi",
-          mirrorAction: "buys-only",
+          // Mirror sales too — a follower that only buys can never exit when
+          // the politician sells. Sell mirroring sells the held quantity only.
+          mirrorAction: "all",
         };
       case "agent-driven":
         return {
@@ -250,7 +260,7 @@ export class AgentTradingPipeline {
     if (!themeExists) {
       const themeInsertSql = convertPlaceholders(
         `INSERT INTO themes (id, name, strategy, mode, schedule, max_allocation_pct, max_total_allocation_pct, max_positions, allocated_capital, params, enabled)
-         VALUES (?, ?, ?, 'sim', '{"type":"manual"}', 99, 99, 10, 0, '{}', 1)`,
+         VALUES (?, ?, ?, 'sim', '{"type":"manual"}', ${AGENT_MAX_ALLOCATION_PCT}, ${AGENT_MAX_TOTAL_ALLOCATION_PCT}, 10, 0, '{}', 1)`,
         db.backend,
       );
       await execRun(db, themeInsertSql, [themeId, agentName, strategy]);

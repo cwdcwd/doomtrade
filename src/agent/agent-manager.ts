@@ -205,8 +205,12 @@ export class AgentManager {
       const positions = positionsByAgent.get(row.id) ?? [];
       const cash = row.cash ?? row.starting_balance;
       const initialCash = row.initial_cash ?? row.starting_balance;
-      // Use avg_entry_price as fallback for current price (conservative — no price provider in batch)
-      const positionsValue = positions.reduce((sum, p) => sum + p.quantity * p.avg_entry_price, 0);
+      // Mark to market via the price provider; fall back to entry price only
+      // when no live price is known for the symbol.
+      const positionsValue = positions.reduce(
+        (sum, p) => sum + p.quantity * (this.config.getCurrentPrice?.(p.symbol) ?? p.avg_entry_price),
+        0,
+      );
       const equity = cash + positionsValue;
       const openPositions = positions.length;
 

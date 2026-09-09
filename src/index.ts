@@ -21,6 +21,7 @@ import { TradeEngine } from "./engine/trade-engine.js";
 import { Portfolio } from "./portfolio/portfolio.js";
 import { createApiRouter } from "./api/routes.js";
 import { createPublicCryptoMarketData, createMarketDataService } from "./market/market.js";
+import { PriceCache } from "./market/stock-price-cache.js";
 import { ResearchService } from "./research/research.js";
 import { ThemeRunner } from "./themes/theme-runner.js";
 import { CongressFollowerStrategy } from "./themes/strategies/congress-follower.js";
@@ -112,14 +113,34 @@ async function main() {
     },
   };
 
+  // Background price cache — refreshes quotes for all open positions (and
+  // the default universe) every 60s. Powers the agents' synchronous
+  // getCurrentPrice so equity/PnL mark to market instead of entry price.
+  const priceCache = new PriceCache({
+    db,
+    marketData,
+    intervalMs: 60_000,
+    watchSymbols: [
+      "BTC/USDT",
+      "ETH/USDT",
+      "SOL/USDT",
+      "XRP/USDT",
+      "ADA/USDT",
+      "DOGE/USDT",
+      "AVAX/USDT",
+    ],
+  });
+
   // Initialize services
   const decisionStore = new DecisionStore(db);
   const tradeEngine = new TradeEngine(db, executor, config, priceProvider);
 
-  // Agent manager — per-agent portfolios with independent balances
+  // Agent manager — per-agent portfolios with independent balances.
+  // getCurrentPrice reads from the background price cache.
   const agentManager = new AgentManager(db, {
     defaultStartingBalance: config.simStartingBalance,
     feeRate: config.simFeePct / 100,
+    getCurrentPrice: (symbol: string) => priceCache.get(symbol),
   });
 
   // Pre-seed default agents
@@ -188,6 +209,9 @@ async function main() {
   // Start all enabled themes on boot
   await themeRunner.startAll();
 
+  // Start the background price refresher
+  priceCache.start();
+
   // App state (mutable for mode toggle)
   const state = {
     decisionStore,
@@ -238,22 +262,14 @@ async function main() {
     authMiddleware(req, res, next);
   });
 
-  // Dashboard route — injects API key into the page so the dashboard's
-  // Serve dashboard with API key injected for browser-side auth.
-  // The dashboard uses authFetch() which reads window.DOOMTRADE_API_KEY.
+  // Dashboard route — public HTML only. The API key is NEVER injected into
+  // the page (it used to be, which leaked the key to anyone who loaded it).
+  // The dashboard prompts the user for their key and keeps it in localStorage.
   // This MUST come before express.static so we intercept the root path.
-  app.get("/", (req, res) => {
+  app.get("/", (_req, res) => {
     const __dirname = dirname(fileURLToPath(import.meta.url));
     const htmlPath = join(__dirname, "..", "public", "index.html");
-    let html = readFileSync(htmlPath, "utf-8");
-    if (config.apiKey) {
-      // Inject API key as a global variable before the dashboard script runs
-      html = html.replace(
-        "<script>",
-        `<script>window.DOOMTRADE_API_KEY = ${JSON.stringify(config.apiKey)};</script>\n<script>`,
-      );
-    }
-    res.send(html);
+    res.sendFile(htmlPath);
   });
 
   // Serve dashboard static files (for any other static assets)

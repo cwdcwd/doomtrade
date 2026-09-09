@@ -386,9 +386,17 @@ export class MomentumRotationStrategy implements ThemeStrategy {
 
   /**
    * Generate a deterministic signal hash for dedup.
+   * Includes the date so a symbol can re-enter after a rotation: hashing
+   * only prefix+symbol+action made every future buy of the same symbol
+   * dedup-skipped forever after the first rotation out.
    */
   private hashSignal(themeId: string, symbol: string, action: string, prefix: string): string {
-    return `${prefix}-${symbol}-${action}`;
+    void themeId;
+    return `${prefix}-${symbol}-${action}-${this.today()}`;
+  }
+
+  private today(): string {
+    return new Date().toISOString().slice(0, 10);
   }
 
   /**
