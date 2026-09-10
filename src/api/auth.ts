@@ -36,3 +36,26 @@ export function apiKeyAuth(apiKey: string) {
     next();
   };
 }
+
+/**
+ * The production auth gate (as mounted in src/index.ts):
+ * public GETs + /health for humans (read-only dashboard), keyed
+ * mutations for machines (fleet crons, A2A). Extracted so tests
+ * exercise the exact middleware the server mounts — not a mirror.
+ */
+export function authGate(apiKey: string) {
+  const keyed = apiKeyAuth(apiKey);
+  return (req: Request, res: Response, next: NextFunction): void => {
+    // No key configured — open access (local dev)
+    if (!apiKey) {
+      next();
+      return;
+    }
+    // Public: health (Railway healthcheck) + everything a browser reads
+    if (req.path === "/health" || req.method === "GET") {
+      next();
+      return;
+    }
+    keyed(req, res, next);
+  };
+}

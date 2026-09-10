@@ -339,7 +339,7 @@ erDiagram
 
 ## Agent API Endpoints
 
-All agent endpoints are under `/api/agents` and require authentication.
+Agent endpoints are under `/api/agents`. **Reads (`GET`) are public** — the dashboard and any viewer can list agents, portfolios, positions, trades, and analytics anonymously. **Mutations (`POST`/`PATCH`/`DELETE`) require the API key** — used by fleet crons and A2A coordination.
 
 | Method | Path | Description |
 | --- | --- | --- |
@@ -357,19 +357,17 @@ All agent endpoints are under `/api/agents` and require authentication.
 | POST | `/api/agents/a2a-cycle` | Run full multi-agent A2A trading cycle |
 | POST | `/admin/reset` | Reset all sim data (requires `confirm: "WIPE_ALL_DATA"`) |
 
-**Example: Get leaderboard**
+**Example: Get leaderboard** (public — no key needed)
 ```bash
-curl http://localhost:3000/api/agents/leaderboard \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl http://localhost:3000/api/agents/leaderboard
 ```
 
-**Example: Get agent analytics**
+**Example: Get agent analytics** (public — no key needed)
 ```bash
-curl http://localhost:3000/api/agents/abc-123/analytics \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl http://localhost:3000/api/agents/abc-123/analytics
 ```
 
-**Example: Trigger strategy evaluation**
+**Example: Trigger strategy evaluation** (keyed — fleet cron path)
 ```bash
 curl -X POST http://localhost:3000/api/agents/abc-123/evaluate \
   -H "Authorization: Bearer YOUR_API_KEY"

@@ -31,20 +31,27 @@ npm run build   # compile to dist/
 
 ## API Endpoints
 
+**Auth policy**: all `GET` endpoints are **public** (read-only dashboard for humans — no API key, no sign-in). All mutations (`POST`/`PATCH`/`DELETE`) require `DOOMTRADE_API_KEY` via `Authorization: Bearer` or `X-API-Key` (fleet crons + A2A agents).
+
 | Method | Path | Description |
 |--------|------|-------------|
 | GET | `/health` | Health check (for Railway) |
 | GET | `/api/health` | API health with mode info |
-| POST | `/api/decisions` | Log a new trading decision |
+| GET | `/api/dashboard` | **Public** batch endpoint powering the dashboard UI — one request returns everything (agents, leaderboard, per-agent portfolio/positions/trades/analytics, market ticker, research). Server-cached: 5s agents, 60s market, 5min research. |
+| POST | `/api/decisions` | Log a new trading decision 🔑 |
 | GET | `/api/decisions` | List decisions (filterable) |
 | GET | `/api/decisions/:id` | Get a single decision |
-| POST | `/api/trade` | Execute a trade from a decision |
+| POST | `/api/trade` | Execute a trade from a decision 🔑 |
 | GET | `/api/trades` | List trades (filterable) |
 | GET | `/api/trades/:id` | Get a single trade |
 | GET | `/api/portfolio` | Current portfolio state + P&L |
 | GET | `/api/portfolio/history` | Equity curve history |
 | GET | `/api/positions` | Open positions |
-| POST | `/api/mode` | Toggle sim/live mode (60s cooldown, confirm required for live) |
+| POST | `/api/mode` | Toggle sim/live mode (60s cooldown, confirm required for live) 🔑 |
+
+🔑 = requires API key (mutation). Full reference: [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
+
+The web dashboard (`/`) is a **read-only public monitor** — it polls `GET /api/dashboard` every 10 seconds and requires zero setup from viewers. Trading runs on the fleet agents' cron cycles, not from the UI.
 
 ## Safety
 

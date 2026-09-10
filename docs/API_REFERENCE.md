@@ -4,14 +4,20 @@
 
 ## Authentication
 
-If `DOOMTRADE_API_KEY` environment variable is set, all requests (except `/api/health`) require authentication via one of:
+DoomTrade uses **split auth by client class**:
+
+- **Reads are public** — every `GET /api/*` endpoint (including `/api/dashboard`) is anonymous. Anyone can view agents, leaderboard, positions, trades, and market data. The dashboard is a read-only public monitor.
+- **Mutations are key-gated** — every `POST`, `PATCH`, and `DELETE` requires the API key. This is the fleet path: agent crons (Doom, ThanosBot), A2A coordination, and admin tooling all authenticate with the key.
+- `/api/health` is always public (Railway healthcheck).
+
+Machines authenticate mutations via either header:
 
 ```
-Authorization: Bearer YOUR_API_KEY
-X-API-Key: YOUR_API_KEY
+Authorization: Bearer <DOOMTRADE_API_KEY>
+X-API-Key: <DOOMTRADE_API_KEY>
 ```
 
-If the env var is not set, authentication is disabled (local dev mode).
+If `DOOMTRADE_API_KEY` is not set, auth is disabled entirely (local dev mode).
 
 ---
 
@@ -31,7 +37,7 @@ All error responses follow a consistent JSON format:
 | Status | When | Example |
 | --- | --- | --- |
 | 400 | Zod validation failed | `{"error": "Validation failed", "details": [...]}` |
-| 401 | Missing or invalid API key | `{"error": "Unauthorized", "message": "..."}` |
+| 401 | Mutation without valid API key | `{"error": "Unauthorized", "message": "..."}` |
 | 404 | Resource not found | `{"error": "Decision not found", "id": "uuid"}` |
 | 422 | Risk check failed (trade execution) | `{"error": "...", "riskPassed": false, ...}` |
 | 429 | Rate limited (mode cooldown) | `{"error": "Mode change cooldown active. 45s remaining."}` |
@@ -58,6 +64,48 @@ Returns server health status. Always public (no auth required).
 
 ```bash
 curl http://localhost:3000/api/health
+```
+
+---
+
+## Dashboard
+
+### GET /api/dashboard
+
+**Public, read-only.** Single batch endpoint powering the dashboard UI — one request returns everything the page renders. No API key, no authentication. Ideal for anonymous viewers; the UI polls this once every 10 seconds.
+
+Upstream data is cached server-side and shared across **all** viewers: agents/leaderboard 5s, market snapshots 60s, research analysis 5min. The first request after cache expiry pays the upstream fetch cost (Kraken analysis ~3s/symbol); subsequent viewers get the cached payload instantly.
+
+**Response** `200`
+```json
+{
+  "mode": "sim",
+  "timestamp": "ISO-8601",
+  "uptime": 3600,
+  "agents": [
+    {
+      "agent": { "id": "uuid", "name": "Doom", "strategy": "momentum-rotation", "active": true, "cash": 1000, "equity": 1042, "initialBalance": 1000, "totalReturnPct": 4.2, "openPositions": 2, "createdAt": "ISO-8601" },
+      "portfolio": { "cash": 500, "equity": 1042, "initialCash": 1000, "unrealizedPnl": 42, "totalReturnPct": 4.2 },
+      "positions": [ { "symbol": "BTC/USDT", "quantity": 0.01, "avgEntryPrice": 65000, "unrealizedPnl": 42 } ],
+      "trades": [ { "symbol": "BTC/USDT", "side": "buy", "quantity": 0.01, "fill_price": 65000, "fee": 6.5, "created_at": "ISO-8601" } ],
+      "analytics": { "totalTrades": 5, "winRate": 0.6, "maxDrawdownPct": 2.1 }
+    }
+  ],
+  "leaderboard": [ { "id": "uuid", "name": "Doom", "rank": 1, "totalReturnPct": 4.2 } ],
+  "market": {
+    "snapshots": [ { "symbol": "BTC/USDT", "price": 65000, "changePct": -0.63, "source": "ccxt" } ],
+    "research": [ { "symbol": "BTC/USDT", "analysis": { "indicators": { "rsi14": 64 }, "signals": { "combined": "neutral" } } } ]
+  }
+}
+```
+
+**Notes**:
+- **Inactive agents are excluded** (same policy as the leaderboard) — deactivated agents never appear in the public payload.
+- `trades` per agent is capped at the 5 most recent.
+- Ticker symbols: `BTC/USDT`, `ETH/USDT`, `SOL/USDT`, `XRP/USDT`, `ADA/USDT`, `DOGE/USDT`, `AVAX/USDT` (1Day timeframe, 1m range).
+
+```bash
+curl https://doomtrade-production.up.railway.app/api/dashboard
 ```
 
 ---
@@ -144,8 +192,7 @@ List decisions with optional filtering.
 ```
 
 ```bash
-curl "http://localhost:3000/api/decisions?agent=kangbot&limit=10" \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl "http://localhost:3000/api/decisions?agent=kangbot&limit=10"
 ```
 
 ### GET /api/decisions/:id
@@ -156,8 +203,7 @@ Get a single decision by ID.
 **Response** `404` — `{error: "Decision not found", id}`
 
 ```bash
-curl http://localhost:3000/api/decisions/abc-123 \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl http://localhost:3000/api/decisions/abc-123
 ```
 
 ---
@@ -280,8 +326,7 @@ List trades with optional filtering.
 ```
 
 ```bash
-curl "http://localhost:3000/api/trades?symbol=BTC/USDT&status=filled&limit=20" \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl "http://localhost:3000/api/trades?symbol=BTC/USDT&status=filled&limit=20"
 ```
 
 ### GET /api/trades/:id
@@ -320,8 +365,7 @@ Get aggregated performance analytics from trade history and equity curve.
 ```
 
 ```bash
-curl "http://localhost:3000/api/trades/analytics?symbol=BTC/USDT" \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl "http://localhost:3000/api/trades/analytics?symbol=BTC/USDT"
 ```
 
 ---
@@ -431,8 +475,7 @@ Get a current price quote. Auto-routes to Alpaca (stocks) or CCXT (crypto) based
 ```
 
 ```bash
-curl "http://localhost:3000/api/market/quote?symbol=AAPL" \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl "http://localhost:3000/api/market/quote?symbol=AAPL"
 ```
 
 ### GET /api/market/bars?symbol=BTC/USDT&timeframe=1Day&range=3m
@@ -515,8 +558,7 @@ Get technical analysis with indicators and signals.
 ```
 
 ```bash
-curl "http://localhost:3000/api/research/analyze?symbol=BTC/USDT&range=6m" \
-  -H "Authorization: Bearer YOUR_API_KEY"
+curl "http://localhost:3000/api/research/analyze?symbol=BTC/USDT&range=6m"
 ```
 
 ---
@@ -665,7 +707,7 @@ List all agents with portfolio summaries.
 
 ### GET /api/agents/leaderboard
 
-Get agents ranked by total return percentage (descending).
+Get active agents ranked by total return percentage (descending). Inactive agents are excluded from the leaderboard (and from `GET /api/dashboard`). Public — no key required.
 
 **Response** `200`
 ```json

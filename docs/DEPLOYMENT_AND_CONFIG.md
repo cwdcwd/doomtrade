@@ -246,13 +246,13 @@ All configuration is loaded from environment variables and validated with Zod at
 | `REDIS_URL` | string | `""` | Redis URL for BullMQ theme scheduling |
 | `A2A_ENDPOINT` | string | `""` | A2A endpoint URL for agent-driven strategy (LiteLLM gateway) |
 | `A2A_TOKEN` | string | `""` | A2A bearer token (falls back to `LITELLM_GATEWAY_API_KEY`) |
-| `DOOMTRADE_API_KEY` | string | `""` | API key for auth (empty = no auth) |
+| `DOOMTRADE_API_KEY` | string | `""` | API key for mutations (POST/PATCH/DELETE). Empty = auth disabled. Reads (GET) are always public. |
 
 ### Key Configuration Notes
 
 > **Warning: Binance geo-blocked from Railway US servers (HTTP 451).** Use `CCXT_EXCHANGE=kraken` for production deployment. The default is "binance" which only works from non-US IPs.
 - **Postgres on Railway**: Set `DATABASE_URL` to the Railway Postgres connection string. Postgres data persists across redeploys; SQLite data does not (unless volume mounted).
-- **API auth**: If `DOOMTRADE_API_KEY` is empty, all endpoints are open (local dev only). Set it for production.
+- **API auth (split)**: If `DOOMTRADE_API_KEY` is empty, auth is disabled (local dev only). If set: all `GET` endpoints are public (read-only dashboard), all mutations (`POST`/`PATCH`/`DELETE`) require the key. Set it for production.
 
 ---
 

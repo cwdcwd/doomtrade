@@ -16,7 +16,7 @@ import { loadConfig } from "./config.js";
 import { openDatabase, persistDatabase, closeDatabase } from "./db/database.js";
 import { DecisionStore } from "./decision/decision-store.js";
 import { SimulatedExchange } from "./executor/simulated.js";
-import { apiKeyAuth } from "./api/auth.js";
+import { authGate } from "./api/auth.js";
 import { TradeEngine } from "./engine/trade-engine.js";
 import { Portfolio } from "./portfolio/portfolio.js";
 import { createApiRouter } from "./api/routes.js";
@@ -254,20 +254,16 @@ async function main() {
   });
   app.use("/api", apiLimiter);
 
-  // API authentication — split by client class:
+  // API authentication — split by client class (see authGate in src/api/auth.ts):
   //   Humans (dashboard browsers): read-only — all GETs public.
   //   Machines (fleet crons, A2A): mutations (POST/PATCH/DELETE) key-gated.
   // If DOOMTRADE_API_KEY is not set, auth is disabled (local dev only).
-  const authMiddleware = apiKeyAuth(config.apiKey);
-  app.use("/api", (req, res, next) => {
-    // Public: health (Railway healthcheck) + everything a browser reads
-    if (req.path === "/health" || req.method === "GET") return next();
-    authMiddleware(req, res, next);
-  });
+  app.use("/api", authGate(config.apiKey));
 
   // Dashboard route — public HTML only. The API key is NEVER injected into
   // the page (it used to be, which leaked the key to anyone who loaded it).
-  // The dashboard prompts the user for their key and keeps it in localStorage.
+  // The dashboard is a read-only viewer: it polls the public
+  // GET /api/dashboard batch endpoint — no key, no sign-in, no localStorage.
   // This MUST come before express.static so we intercept the root path.
   app.get("/", (_req, res) => {
     const __dirname = dirname(fileURLToPath(import.meta.url));

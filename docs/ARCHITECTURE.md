@@ -361,9 +361,10 @@ See [AGENTS.md](AGENTS.md) for full documentation.
 
 ### 11. API Layer (`src/api/`)
 
-Express router with Zod-validated endpoints and API key authentication.
+Express router with Zod-validated endpoints and split authentication (public reads, keyed mutations).
 
-- **Auth**: `Authorization: Bearer <key>` or `X-API-Key: <key>` header. Disabled when `DOOMTRADE_API_KEY` is empty. `/api/health` is always public.
+- **Auth**: Split by client class — all `GET` requests are public (read-only dashboard for humans), all mutations (`POST`/`PATCH`/`DELETE`) require `Authorization: Bearer ***` or `X-API-Key: ***` (fleet crons + A2A). Disabled when `DOOMTRADE_API_KEY` is empty. `/api/health` is always public.
+- **Dashboard batch endpoint**: `GET /api/dashboard` (`routes/dashboard.ts`) — public, single request returning agents (active only), leaderboard, per-agent portfolio/positions/trades/analytics, market snapshots, and research. Server-side cache: 5s agents, 60s market, 5min research, shared across all viewers.
 - **Schemas**: All request bodies and query params validated with Zod schemas in `schemas.ts`
 - **State**: `AppState` holds references to all services (decisionStore, tradeEngine, portfolio, marketData, research, themeRunner, db, agentManager, agentTradeEngine)
 
@@ -380,7 +381,7 @@ Boots the server:
 4. Initialize services (portfolio, market data, research, decision store, trade engine)
 5. Initialize agent system (agent manager, seed defaults, agent trade engine, trading pipeline)
 6. Initialize theme runner + register built-in strategies + start all enabled themes
-7. Mount auth middleware + API routes + dashboard
+7. Mount auth middleware (GETs public, mutations keyed) + API routes + public dashboard
 8. SIGINT/SIGTERM handlers persist SQLite and stop themes
 
 ## Trade Execution Flow

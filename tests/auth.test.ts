@@ -11,20 +11,17 @@
 import { describe, it, expect } from "vitest";
 import express from "express";
 import request from "supertest";
-import { apiKeyAuth } from "../src/api/auth.js";
+import { authGate } from "../src/api/auth.js";
 
-/** Mirrors the gate wired in src/index.ts. */
+/** Mounts the REAL production gate — the same middleware src/index.ts mounts. */
 function makeApp(key: string) {
   const app = express();
   app.use(express.json());
-  const auth = apiKeyAuth(key);
-  app.use("/api", (req, res, next) => {
-    if (req.path === "/health" || req.method === "GET") return next();
-    auth(req, res, next);
-  });
+  app.use("/api", authGate(key));
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
   app.get("/api/dashboard", (_req, res) => res.json({ agents: [] }));
   app.get("/api/agents", (_req, res) => res.json({ agents: [] }));
+  app.get("/api/agents/:id", (req, res) => res.json({ agent: { id: req.params.id } }));
   app.post("/api/agents", (_req, res) => res.status(201).json({ created: true }));
   app.patch("/api/agents/:id", (_req, res) => res.json({ updated: true }));
   app.delete("/api/agents/:id", (_req, res) => res.json({ deactivated: true }));
@@ -119,6 +116,21 @@ describe("API auth policy — public reads, keyed writes", () => {
         .set("Authorization", "Token abc")
         .send({});
       expect(res.status).toBe(401);
+    });
+
+    it("same path: GET public, PATCH keyed — no method confusion bypass", async () => {
+      // GET on the same path is public read (200)…
+      const read = await request(app).get("/api/agents/abc");
+      expect(read.status).toBe(200);
+      // …but PATCH on the SAME path without a key is rejected (401)
+      const mutate = await request(app).patch("/api/agents/abc").send({});
+      expect(mutate.status).toBe(401);
+      // and with the key it passes
+      const keyed = await request(app)
+        .patch("/api/agents/abc")
+        .set("Authorization", `Bearer ${KEY}`)
+        .send({});
+      expect(keyed.status).toBe(200);
     });
   });
 

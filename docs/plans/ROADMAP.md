@@ -238,7 +238,7 @@ Connect the themes framework to the A2A pipeline so agents can:
 | `TRADE_MODE` | sim | `sim` (paper) or `live` (real orders) |
 | `DATABASE_URL` | (empty) | Postgres connection string. If set, uses Postgres. If empty, SQLite. |
 | `DATABASE_PATH` | ./data/doomtrade.db | SQLite file path (ignored when DATABASE_URL is set) |
-| `DOOMTRADE_API_KEY` | (empty) | API key for auth. If empty, auth disabled (local dev only). |
+| `DOOMTRADE_API_KEY` | (empty) | API key for mutations. Empty = auth disabled (local dev only). Reads (GET) are public. |
 | `CCXT_EXCHANGE` | binance | Crypto exchange ID. Use `kraken` for Railway (Binance geo-blocked). |
 | `CCXT_API_KEY` | (empty) | Exchange API key (for live crypto trading) |
 | `CCXT_API_SECRET` | (empty) | Exchange API secret |
