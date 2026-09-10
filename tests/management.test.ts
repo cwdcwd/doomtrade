@@ -11,10 +11,14 @@
  *   4. Valid session, non-admin → 403 {error:"forbidden"}.
  *
  * The Clerk SDK is never called: clerkMiddleware is NOT mounted in these
- * tests — instead a stub middleware attaches the same `req.auth` shape the
- * real middleware produces ({userId}), mirroring how src/api/clerk.ts
- * reads it. This tests OUR guard logic; Clerk's own session verification
- * is exercised in the E2E bead (fleet-ops-8g7) on production.
+ * tests — instead attachStubAuth (src/api/clerk.ts) attaches the same
+ * branded req.auth FUNCTION the real middleware produces. sessionUserId
+ * reads through the REAL getAuth() from @clerk/express, so this tests
+ * our guard logic against the SDK's actual contract; Clerk's own session
+ * verification is exercised in the E2E bead (fleet-ops-8g7) on production.
+ * (fleet-ops-r7j: the previous object-shaped stub masked the exact
+ * req.auth-shape bug that broke production — a function-shaped, branded
+ * stub cannot hide that class of bug again.)
  */
 
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
@@ -23,6 +27,7 @@ import supertest from "supertest";
 import type { Database } from "../src/db/database.js";
 import { openDatabase, closeDatabase } from "../src/db/database.js";
 import { createManagementRouter } from "../src/api/routes/management.js";
+import { attachStubAuth } from "../src/api/clerk.js";
 import type { AppState } from "../src/api/routes.js";
 import type { Config } from "../src/config.js";
 import { getSetting, SETTING_KEYS } from "../src/db/settings-store.js";
@@ -64,8 +69,8 @@ function makeConfig(overrides: Partial<Config> = {}) {
 
 /**
  * Build a test app around the REAL management router.
- * `sessionUserId` (may be null) is attached to req.auth by a stub
- * middleware that mirrors what clerkMiddleware produces upstream.
+ * `sessionUserId` (may be null) is attached to req.auth by attachStubAuth
+ * as a branded function — the exact shape clerkMiddleware produces.
  */
 function makeApp(
   state: AppState,
@@ -75,9 +80,7 @@ function makeApp(
   app.use(express.json());
   if (sessionUserId !== undefined) {
     app.use((req, _res, next) => {
-      (req as { auth?: unknown }).auth = sessionUserId
-        ? { userId: sessionUserId }
-        : { userId: null };
+      attachStubAuth(req, sessionUserId);
       next();
     });
   }

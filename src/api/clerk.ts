@@ -11,7 +11,8 @@
  *  - secured (valid CLERK_SECRET_KEY + publishable key): sessions are
  *    verified server-side by @clerk/express clerkMiddleware, which is
  *    mounted (in src/index.ts) on /api/management before this module's
- *    guards run. It attaches the Clerk AuthObject to req.auth.
+ *    guards run. It attaches a branded req.auth FUNCTION; read sessions
+ *    via getAuth() (see sessionUserId below), never req.auth directly.
  *
  * Key policy: the secret key (sk_) is server-only. The publishable key
  * (pk_) is public by design — it is the only Clerk value the frontend
@@ -25,6 +26,7 @@
 
 import type { Request, RequestHandler } from "express";
 import { createHash, timingSafeEqual } from "node:crypto";
+import { getAuth } from "@clerk/express";
 
 /** The Clerk-related slice of the app Config. */
 export interface ClerkAuthConfig {
@@ -51,10 +53,46 @@ export function clerkEnabled(cfg: ClerkAuthConfig): boolean {
   return isClerkSecretKey(cfg.clerkSecretKey) && cfg.clerkPublishableKey !== "";
 }
 
-/** Session userId as attached by clerkMiddleware (absent when not mounted). */
+/**
+ * Session userId, read via the SDK's getAuth() rather than req.auth
+ * directly: clerkMiddleware attaches req.auth as a branded FUNCTION
+ * (req.auth(opts) returns the AuthObject), so req.auth?.userId was
+ * always undefined (fleet-ops-r7j). getAuth() is the sanctioned reader.
+ *
+ * Defensive fallback: when req.auth is not a branded function
+ * (middleware not mounted — dev-open mode, or a stub lacking the
+ * brand), getAuth() throws; treat that as "no session".
+ */
 export function sessionUserId(req: Request): string | null {
-  const auth = (req as Request & { auth?: { userId: string | null } }).auth;
-  return auth?.userId ?? null;
+  let auth: { userId: string | null };
+  try {
+    auth = getAuth(req);
+  } catch {
+    return null; // clerkMiddleware not in the chain: no session exists
+  }
+  return auth.userId ?? null;
+}
+
+/**
+ * Attach a Clerk-shaped req.auth to a request: the same branded
+ * function clerkMiddleware produces (see @clerk/express
+ * brandRequestAuth). Exported so tests stub the REAL middleware shape
+ * instead of inventing one — the brand symbol is Symbol.for-registered
+ * globally by the SDK precisely so stubs and SDK interoperate.
+ *
+ * The returned AuthObject mirrors the SDK's signed-in shape: real
+ * getAuth() pipes it through getAuthObjectForAcceptedToken, which
+ * REQUIRES tokenType:"session_token" to accept the session (a bare
+ * {userId} is rejected as signed-out). Signed-out stubs carry
+ * userId:null, matching signedOutAuthObject.
+ */
+export function attachStubAuth(req: Request, userId: string | null): void {
+  const clerkAuthBrand = Symbol.for("@clerk/express.auth");
+  const handler = Object.assign(
+    userId ? () => ({ userId, tokenType: "session_token" }) : () => ({ userId: null }),
+    { [clerkAuthBrand]: true },
+  );
+  (req as Request & { auth?: unknown }).auth = handler;
 }
 
 /**
