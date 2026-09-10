@@ -55,9 +55,12 @@ export function createDashboardRouter(state: AppState): Router {
   router.get("/dashboard", async (_req: Request, res: Response) => {
     try {
       // ── Agents (5s cache) ──────────────────────────────────────
+      // Only active agents — same policy as the leaderboard. Inactive
+      // agents (e.g. a retired TestAgent) are hidden from the public view.
       const agents = await cache.get("agents", 5_000, async () => {
         if (!state.agentManager) return [];
-        return state.agentManager.list();
+        const all = await state.agentManager.list();
+        return all.filter((a) => a.active);
       });
 
       const leaderboard = await cache.get("leaderboard", 5_000, async () => {

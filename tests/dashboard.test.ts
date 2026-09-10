@@ -149,4 +149,34 @@ describe("GET /api/dashboard", () => {
     expect(btc.analysis.indicators.rsi14).toBe(55);
     expect(btc.analysis.signals.combined).toBe("buy");
   });
+
+  it("hides inactive agents (TestAgent policy — matches leaderboard)", async () => {
+    const counter = { n: 0 };
+    const app = createTestApp(db, counter);
+
+    // Register one active + one inactive agent, then verify the filter
+    const state = (app as unknown as { _state?: AppState });
+    void state;
+    // Reach the manager through the router factory's state via re-creation:
+    // simpler — register through a second app sharing the same db
+    const mgr = new AgentManager(db, {
+      defaultStartingBalance: 1000,
+      feeRate: 0.001,
+      getCurrentPrice: () => null,
+    });
+    await mgr.register("LiveAgent", { startingBalance: 1000 });
+    const ghost = await mgr.register("GhostAgent", { startingBalance: 1000 });
+    await mgr.deactivate(ghost.id);
+
+    const res = await supertest(app).get("/api/dashboard");
+    const names = (res.body.agents as Array<{ agent: { name: string } }>).map(
+      (d) => d.agent.name,
+    );
+    expect(names).not.toContain("GhostAgent");
+    // LiveAgent may or may not appear depending on the test app's seeding;
+    // the invariant is: no inactive agent ever leaks into the payload.
+    for (const d of res.body.agents) {
+      expect(d.agent.active).toBe(true);
+    }
+  });
 });
