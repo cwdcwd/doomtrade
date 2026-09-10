@@ -31,7 +31,7 @@ npm run build   # compile to dist/
 
 ## API Endpoints
 
-**Auth policy**: all `GET` endpoints are **public** (read-only dashboard for humans — no API key, no sign-in). All mutations (`POST`/`PATCH`/`DELETE`) require `DOOMTRADE_API_KEY` via `Authorization: Bearer` or `X-API-Key` (fleet crons + A2A agents).
+**Auth policy**: all `GET` endpoints are **public** (read-only dashboard for humans — no API key, no sign-in). All mutations (`POST`/`PATCH`/`DELETE`) require `DOOMTRADE_API_KEY` via `Authorization: Bearer` or `X-API-Key` (fleet crons + A2A agents). Separately, the **management dashboard** (risk limits) is gated by Clerk admin sessions — see "Management dashboard auth (Clerk)" below.
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -48,10 +48,22 @@ npm run build   # compile to dist/
 | GET | `/api/portfolio/history` | Equity curve history |
 | GET | `/api/positions` | Open positions |
 | POST | `/api/mode` | Toggle sim/live mode (60s cooldown, confirm required for live) 🔑 |
+| GET | `/api/management/me` | Clerk session status probe (always 200) 🔒 |
+| GET | `/api/management/risk-limits` | Current risk limits 🔒 admin |
+| PUT | `/api/management/risk-limits` | Update risk limits (Zod-bounded, persisted, live) 🔒 admin |
 
-🔑 = requires API key (mutation). Full reference: [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
+🔑 = requires API key (mutation). 🔒 = requires Clerk admin session. Full reference: [docs/API_REFERENCE.md](docs/API_REFERENCE.md).
 
 The web dashboard (`/`) is a **read-only public monitor** — it polls `GET /api/dashboard` every 10 seconds and requires zero setup from viewers. Trading runs on the fleet agents' cron cycles, not from the UI.
+
+### Management dashboard auth (Clerk)
+
+The dashboard includes an admin-only **Management** panel (risk limits), gated entirely by the server:
+
+- **Anonymous viewers**: nothing changes — read-only dashboard, no sign-in, no keys.
+- **Clerk configured** (`CLERK_SECRET_KEY` + `CLERK_PUBLISHABLE_KEY` + `ADMIN_CLERK_USER_ID` set): the panel shows a **Sign in** button (Clerk-hosted, username+password). A valid session that is not the configured admin gets `403 forbidden`; the admin gets the risk-limits form. Limits are Zod-bounded server-side, persisted to the `settings` table, and picked up by both trade engines on their next risk check — no restart needed. A persisted row also overrides the env defaults on every subsequent boot.
+- **Dev-open** (no valid `CLERK_SECRET_KEY`): the panel stays hidden and management routes answer `401`. Zero Clerk code runs.
+- **Key policy**: the publishable key (`pk_…`) is public by design and is the only Clerk value the browser ever receives. The secret key (`sk_…`) is server-only, never sent to a client, never committed.
 
 ## Safety
 

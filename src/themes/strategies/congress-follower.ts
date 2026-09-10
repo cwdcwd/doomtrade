@@ -198,7 +198,16 @@ export class CongressFollowerStrategy implements ThemeStrategy {
 
       let filled: OrderResult | null = null;
       if (signal.action === "buy") {
-        filled = await this.executeBuy(config, subAccount, equity, cash, signal, price, positions, errors);
+        filled = await this.executeBuy(
+          config,
+          subAccount,
+          equity,
+          cash,
+          signal,
+          price,
+          positions,
+          errors,
+        );
       } else {
         filled = await this.executeSell(subAccount, signal, price, positions, errors);
       }

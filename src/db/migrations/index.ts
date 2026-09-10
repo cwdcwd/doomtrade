@@ -14,6 +14,7 @@ import migration005 from "./005_themes.js";
 import migration006 from "./006_sim_sub_orders_realized_pnl.js";
 import migration007 from "./007_agent_tables.js";
 import migration008 from "./008_decisions_agent_any_name.js";
+import migration009 from "./009_settings.js";
 
 export { type Migration } from "./types.js";
 
@@ -26,4 +27,5 @@ export const migrations: Migration[] = [
   migration006,
   migration007,
   migration008,
+  migration009,
 ];

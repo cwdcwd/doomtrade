@@ -127,10 +127,7 @@ export class AgentManager {
    * Get agent by name.
    */
   async getByName(name: string): Promise<Agent | null> {
-    const sql = convertPlaceholders(
-      "SELECT * FROM agents WHERE name = ?",
-      this.db.backend,
-    );
+    const sql = convertPlaceholders("SELECT * FROM agents WHERE name = ?", this.db.backend);
     const row = await execGet<AgentRow>(this.db, sql, [name]);
     return row ? this.rowToAgent(row) : null;
   }
@@ -139,10 +136,7 @@ export class AgentManager {
    * Get agent by ID.
    */
   async getById(id: string): Promise<Agent | null> {
-    const sql = convertPlaceholders(
-      "SELECT * FROM agents WHERE id = ?",
-      this.db.backend,
-    );
+    const sql = convertPlaceholders("SELECT * FROM agents WHERE id = ?", this.db.backend);
     const row = await execGet<AgentRow>(this.db, sql, [id]);
     return row ? this.rowToAgent(row) : null;
   }
@@ -184,9 +178,10 @@ export class AgentManager {
         cash: balance.cash,
         equity: balance.equity,
         initialBalance: balance.initialCash,
-        totalReturnPct: balance.initialCash > 0
-          ? ((balance.equity - balance.initialCash) / balance.initialCash) * 100
-          : 0,
+        totalReturnPct:
+          balance.initialCash > 0
+            ? ((balance.equity - balance.initialCash) / balance.initialCash) * 100
+            : 0,
         openPositions: positions.length,
         createdAt: row.created_at,
       });
@@ -214,7 +209,9 @@ export class AgentManager {
     }));
 
     entries.sort((a, b) => b.totalReturnPct - a.totalReturnPct);
-    entries.forEach((e, i) => { e.rank = i + 1; });
+    entries.forEach((e, i) => {
+      e.rank = i + 1;
+    });
 
     return entries;
   }
@@ -223,10 +220,7 @@ export class AgentManager {
    * Update an agent's strategy.
    */
   async setStrategy(agentId: string, strategy: string): Promise<void> {
-    const sql = convertPlaceholders(
-      "UPDATE agents SET strategy = ? WHERE id = ?",
-      this.db.backend,
-    );
+    const sql = convertPlaceholders("UPDATE agents SET strategy = ? WHERE id = ?", this.db.backend);
     await execRun(this.db, sql, [strategy, agentId]);
   }
 
@@ -234,10 +228,7 @@ export class AgentManager {
    * Deactivate an agent.
    */
   async deactivate(agentId: string): Promise<void> {
-    const sql = convertPlaceholders(
-      "UPDATE agents SET active = 0 WHERE id = ?",
-      this.db.backend,
-    );
+    const sql = convertPlaceholders("UPDATE agents SET active = 0 WHERE id = ?", this.db.backend);
     await execRun(this.db, sql, [agentId]);
   }
 

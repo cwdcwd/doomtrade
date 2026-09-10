@@ -188,6 +188,176 @@ function renderCard(d) {
   return h;
 }
 
-// ── Init ─────────────────────────────────────────
+// ── Init ────────────────────────────────
 refresh();
 setInterval(refresh, 10000); // one request per cycle — server caches upstreams
+
+// ── Management (Clerk-gated admin panel) ─────────────────
+// The panel renders ONLY from the server's response to
+// GET /api/management/me — never from client-side trust.
+// Dev-open (no Clerk config): /me says {authenticated:false, clerkConfigured:false}
+//   → panel stays hidden.
+// Configured + anonymous: /me includes the publishable key (public by
+//   design — pk_ is the ONLY Clerk value that ever reaches the browser)
+//   → Sign-in button, which loads Clerk.js via the same-origin /__clerk
+//   proxy and opens Clerk's hosted sign-in (username+password).
+// Admin session: → risk-limits form (GET/PUT /api/management/risk-limits).
+const MGMT_FIELDS = [
+  { key: 'maxOpenPositions',    label: 'Max open positions',    hint: '1–50',             step: '1' },
+  { key: 'maxPositionSizePct',   label: 'Max position size %',  hint: '1–100 % of equity', step: 'any' },
+  { key: 'dailyTradeLimit',      label: 'Daily trade limit',     hint: '1–100 trades/day',  step: '1' },
+  { key: 'maxDrawdownPct',       label: 'Max drawdown %',        hint: '1–50 %',            step: 'any' },
+  { key: 'simStartingBalance',   label: 'Sim starting balance', hint: '> 0 (USD)',         step: 'any' },
+  { key: 'simFeePct',           label: 'Sim fee %',             hint: '0–1 % per trade',   step: 'any' },
+];
+
+function mgmtEl() { return document.getElementById('management'); }
+
+/** Load Clerk.js same-origin (server proxies /__clerk → Clerk FAPI). */
+function loadClerkJs(publishableKey) {
+  return new Promise((resolve, reject) => {
+    if (window.Clerk) { resolve(window.Clerk); return; }
+    const ui = document.createElement('script');
+    ui.src = '/__clerk/npm/@clerk/ui@1/dist/ui.browser.js';
+    ui.async = true;
+    ui.crossOrigin = 'anonymous';
+    document.head.appendChild(ui);
+    const js = document.createElement('script');
+    js.src = '/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js';
+    js.async = true;
+    js.crossOrigin = 'anonymous';
+    js.dataset.clerkPublishableKey = publishableKey;
+    js.dataset.clerkProxyUrl = '/__clerk';
+    js.onload = async () => {
+      try {
+        await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
+        resolve(window.Clerk);
+      } catch (e) { reject(e); }
+    };
+    js.onerror = () => reject(new Error('Failed to load Clerk.js'));
+    document.head.appendChild(js);
+  });
+}
+
+/** Render the sign-in state (anonymous, Clerk configured). */
+function renderSignIn(pk) {
+  const el = mgmtEl();
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="mgmt-head">
+      <div class="mgmt-title">Management</div>
+    </div>
+    <div class="mgmt-body">
+      <div class="mgmt-note">Admins sign in to manage risk limits.</div>
+      <div class="mgmt-actions">
+        <button class="btn" id="mgmt-signin">Sign in</button>
+      </div>
+    </div>`;
+  el.querySelector('#mgmt-signin').addEventListener('click', async () => {
+    const btn = el.querySelector('#mgmt-signin');
+    btn.disabled = true;
+    btn.textContent = 'Loading…';
+    try {
+      const clerk = await loadClerkJs(pk);
+      // Hosted sign-in (username+password) in a Clerk modal; on success
+      // Clerk sets the session cookie and we re-probe /me.
+      clerk.openSignIn({
+        afterSignIn: () => { closeSignIn(clerk); refreshManagement(); },
+        afterSignUp: () => { closeSignIn(clerk); refreshManagement(); },
+      });
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+    } catch (e) {
+      btn.disabled = false;
+      btn.textContent = 'Sign in';
+      toast('Clerk failed to load: ' + e.message, false);
+    }
+  });
+}
+
+function closeSignIn(clerk) {
+  try { clerk.closeSignIn(); } catch (e) { /* modal already closed */ }
+}
+
+/** Render the risk-limits form (admin session). */
+function renderLimitsForm(limits, username) {
+  const el = mgmtEl();
+  el.hidden = false;
+  el.innerHTML = `
+    <div class="mgmt-head">
+      <div class="mgmt-title">Management — Risk Limits</div>
+      <div class="mgmt-note">${esc(username || 'admin')}</div>
+    </div>
+    <div class="mgmt-body">
+      <form class="mgmt-form" id="mgmt-form">
+        ${MGMT_FIELDS.map(f => `
+          <div class="mgmt-field">
+            <label for="mgmt-${f.key}">${f.label}</label>
+            <input id="mgmt-${f.key}" name="${f.key}" type="number" step="${f.step}" value="${limits[f.key]}" required />
+            <div class="hint">${f.hint}</div>
+          </div>`).join('')}
+      </form>
+      <div class="mgmt-actions">
+        <button type="submit" form="mgmt-form" class="btn btn-primary" id="mgmt-save">Save limits</button>
+        <span class="err" id="mgmt-err"></span>
+      </div>
+    </div>`;
+
+  el.querySelector('#mgmt-form').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const errEl = el.querySelector('#mgmt-err');
+    const body = {};
+    for (const f of MGMT_FIELDS) body[f.key] = Number(el.querySelector('#mgmt-' + f.key).value);
+    try {
+      const r = await fetch('/api/management/risk-limits', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+      if (r.status === 401) { refreshManagement(); throw new Error('Session expired — sign in again'); }
+      if (r.status === 403) { throw new Error('Not admin'); }
+      if (!r.ok) {
+        const j = await r.json().catch(() => ({}));
+        throw new Error(j.error || ('HTTP ' + r.status));
+      }
+      toast('Risk limits saved', true);
+      errEl.textContent = '';
+      refresh();
+    } catch (e) {
+      errEl.textContent = e.message;
+      toast('Save failed: ' + e.message, false);
+    }
+  });
+}
+
+/** Probe /me and render the right management state. Server-driven only. */
+async function refreshManagement() {
+  const el = mgmtEl();
+  try {
+    const r = await fetch('/api/management/me');
+    if (!r.ok) { el.hidden = true; return; }
+    const me = await r.json();
+    if (me.authenticated && me.isAdmin) {
+      const lr = await fetch('/api/management/risk-limits');
+      if (!lr.ok) { el.hidden = true; return; }
+      const { limits } = await lr.json();
+      renderLimitsForm(limits, me.username);
+    } else if (me.authenticated && !me.isAdmin) {
+      // Signed in but not the admin — show notice, no form.
+      el.hidden = false;
+      el.innerHTML = `
+        <div class="mgmt-head"><div class="mgmt-title">Management</div></div>
+        <div class="mgmt-body"><div class="mgmt-note">
+          Signed in as <strong>${esc(me.username || 'user')}</strong> — admin access required.
+        </div></div>`;
+    } else if (me.clerkConfigured) {
+      renderSignIn(me.publishableKey);
+    } else {
+      el.hidden = true;
+    }
+  } catch {
+    el.hidden = true; // /me unreachable — keep the read-only dashboard intact
+  }
+}
+
+refreshManagement();

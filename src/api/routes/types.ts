@@ -28,6 +28,7 @@ import {
   CreateAgentBodySchema,
   UpdateAgentBodySchema,
   ListAgentTradesQuerySchema,
+  RiskLimitsSchema,
 } from "../schemas.js";
 import { z } from "zod";
 import { errorMessage } from "../../util/error.js";
@@ -58,6 +59,7 @@ export {
   CreateAgentBodySchema,
   UpdateAgentBodySchema,
   ListAgentTradesQuerySchema,
+  RiskLimitsSchema,
   z,
   errorMessage,
 };
@@ -89,6 +91,8 @@ export interface AppState {
   agentPipeline?: import("../../agent/trading-pipeline.js").AgentTradingPipeline;
   /** A2A trading coordinator for multi-agent orchestration */
   a2aCoordinator?: import("../../integration/a2a-trading-coordinator.js").A2ATradingCoordinator;
+  /** Clerk user lookup for the management dashboard (/me username). */
+  clerkUserLookup?: import("./management.js").ClerkUserLookup;
 }
 
 // ── Mode toggle cooldown (seconds) ──────────────────────────────

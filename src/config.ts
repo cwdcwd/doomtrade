@@ -40,6 +40,13 @@ const ConfigSchema = z.object({
   a2aEndpoint: z.string().default(""),
   a2aToken: z.string().default(""),
 
+  // Clerk management-dashboard auth. Empty/malformed secret key = dev-open
+  // mode (management routes behave anonymous). sk_ stays server-side; the
+  // publishable key pk_ is the only Clerk value ever sent to browsers.
+  clerkSecretKey: z.string().default(""),
+  clerkPublishableKey: z.string().default(""),
+  adminClerkUserId: z.string().default(""),
+
   // API security
   apiKey: z.string().default(""),
 });
@@ -73,6 +80,9 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     redisUrl: env.REDIS_URL,
     a2aEndpoint: env.A2A_ENDPOINT ?? "",
     a2aToken: env.A2A_TOKEN ?? env.LITELLM_GATEWAY_API_KEY ?? "",
+    clerkSecretKey: env.CLERK_SECRET_KEY ?? "",
+    clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY ?? "",
+    adminClerkUserId: env.ADMIN_CLERK_USER_ID ?? "",
     apiKey: env.DOOMTRADE_API_KEY,
   });
 }

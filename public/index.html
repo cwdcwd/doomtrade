@@ -178,6 +178,35 @@
     .sig-buy { background: rgba(38,208,124,0.15); color: var(--green); }
     .sig-sell { background: rgba(240,68,68,0.15); color: var(--red); }
     .sig-neutral { background: rgba(107,118,132,0.15); color: var(--muted); }
+
+    /* Management panel */
+    .mgmt { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; margin-bottom: 20px; overflow: hidden; }
+    .mgmt-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 14px 16px; border-bottom: 1px solid var(--border);
+    }
+    .mgmt-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: var(--text); }
+    .mgmt-title::before {
+      content: ''; display: inline-block; width: 3px; height: 10px;
+      border-radius: 2px; background: var(--purple); margin-right: 6px; vertical-align: middle;
+    }
+    .mgmt-body { padding: 14px 16px; }
+    .mgmt-note { font-size: 11px; color: var(--muted); }
+    .mgmt-form { display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 12px; }
+    .mgmt-field label { display: block; font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 4px; }
+    .mgmt-field input {
+      width: 100%; padding: 7px 10px; border-radius: 5px; font-size: 12px; font-family: inherit;
+      border: 1px solid var(--border-light); background: var(--surface2); color: var(--text);
+    }
+    .mgmt-field input:focus { outline: 1px solid var(--purple); }
+    .mgmt-field .hint { font-size: 10px; color: var(--dim); margin-top: 2px; }
+    .mgmt-actions { display: flex; gap: 8px; align-items: center; margin-top: 12px; }
+    .mgmt-actions .err { font-size: 11px; color: var(--red); }
+    .btn-primary {
+      background: rgba(184,132,255,0.12); color: var(--purple);
+      border-color: rgba(184,132,255,0.3);
+    }
+    .btn-primary:hover { background: rgba(184,132,255,0.2); color: var(--purple); border-color: rgba(184,132,255,0.5); }
   </style>
 </head>
 <body>
@@ -207,6 +236,9 @@
   <div class="market-bar" id="market-bar">
     <div style="color:var(--dim);padding:10px 14px;font-size:11px">Loading market data…</div>
   </div>
+
+  <!-- Management (admin-only; rendered by app.js from /api/management/me) -->
+  <div class="mgmt" id="management" hidden></div>
 
   <!-- Agent grid -->
   <div class="grid" id="grid">
