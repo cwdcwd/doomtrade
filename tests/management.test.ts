@@ -197,6 +197,20 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
     expect(JSON.stringify(res.body)).not.toContain("sk_");
   });
 
+  it("/me: configured but clerkMiddleware absent from chain → anonymous (fail closed)", async () => {
+    // Covers sessionUserId's catch: in production the middleware IS in the
+    // chain for /api/management (scoped mount, fleet-ops-mmt.2); when it is
+    // not (e.g. a misconfigured mount), getAuth() throws and the route
+    // must treat the request as anonymous, not 500.
+    const state = makeState(db, configured);
+    const app = makeApp(state, undefined); // no stub: req.auth never attached
+    const res = await supertest(app).get("/api/management/me");
+    expect(res.status).toBe(200);
+    expect(res.body.authenticated).toBe(false);
+    expect(res.body.clerkConfigured).toBe(true);
+    expect(res.body.publishableKey).toBe(configured.clerkPublishableKey);
+  });
+
   it("/me: valid admin session → {authenticated:true, username, isAdmin:true}", async () => {
     const state = makeState(db, configured);
     state.clerkUserLookup = userLookup("lazybaer");
@@ -350,8 +364,8 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
 describe("Clerk guard unit tests (src/api/clerk.ts)", () => {
   it("isClerkSecretKey accepts sk_ keys, rejects placeholders", async () => {
     const { isClerkSecretKey } = await import("../src/api/clerk.js");
-    expect(isClerkSecretKey("sk_mocksecretkey_000001")).toBe(true);
-    expect(isClerkSecretKey("sk_mocksecretkeylive_0001")).toBe(true);
+    expect(isClerkSecretKey("sk_test_1234567890abc")).toBe(true);
+    expect(isClerkSecretKey("sk_live_1234567890xyz")).toBe(true);
     expect(isClerkSecretKey("")).toBe(false);
     expect(isClerkSecretKey("ROTATE_ME")).toBe(false);
     expect(isClerkSecretKey("placeholder")).toBe(false);
@@ -368,5 +382,65 @@ describe("Clerk guard unit tests (src/api/clerk.ts)", () => {
   it("isAdminUser: no configured admin → false (fail closed)", async () => {
     const { isAdminUser } = await import("../src/api/clerk.js");
     expect(isAdminUser("user_x", { clerkSecretKey: "sk_mock_x", clerkPublishableKey: "pk", adminClerkUserId: "" })).toBe(false);
+  });
+});
+
+describe("Clerk FAPI origin derivation (fleet-ops-mmt.2)", () => {
+  // The real prod pk shape (live-verified 2026-09-10: decodes to
+  // thorough-robin-1114.clerk.accounts.dev) — re-encoded here with a fake
+  // slug so no real key material lands in the test file.
+  const pk = (frontendApi: string) =>
+    `pk_test_${Buffer.from(`${frontendApi}$`).toString("base64").replace(/=+$/, "")}`;
+
+  it("derives the FAPI origin from a pk_test_ key", async () => {
+    const { clerkFapiOrigin } = await import("../src/api/clerk.js");
+    expect(clerkFapiOrigin(pk("thorough-robin-1114.clerk.accounts.dev"))).toBe(
+      "https://thorough-robin-1114.clerk.accounts.dev",
+    );
+  });
+
+  it("derives the FAPI origin from a pk_live_ key", async () => {
+    const { clerkFapiOrigin } = await import("../src/api/clerk.js");
+    const livePk = pk("clerk.example.com");
+    expect(clerkFapiOrigin(livePk.replace("pk_test_", "pk_live_"))).toBe("https://clerk.example.com");
+  });
+
+  it("rejects malformed keys — fail closed", async () => {
+    const { clerkFapiOrigin } = await import("../src/api/clerk.js");
+    expect(clerkFapiOrigin("")).toBeNull();
+    expect(clerkFapiOrigin("pk_test_")).toBeNull();
+    expect(clerkFapiOrigin("not-a-key")).toBeNull();
+    // segment not a valid key encoding: decodes to "nohostend$" → has no dot
+    expect(clerkFapiOrigin("pk_test_bm9ob3N0ZW5k")).toBeNull();
+    // decodes to "two$$" → more than one '$' at the end
+    expect(clerkFapiOrigin("pk_test_dHdvJCQ")).toBeNull();
+    // decodes to "no-dollar-sign" (no trailing '$')
+    expect(clerkFapiOrigin(pk("clerk.example.com").slice(0, -2) + "aa")).toBeNull();
+  });
+
+  it("CSP directives: FAPI origin added to script/connect/frame-src when configured", async () => {
+    const { clerkCspDirectives } = await import("../src/api/clerk.js");
+    const cfg = {
+      clerkSecretKey: "sk_test_1234567890",
+      clerkPublishableKey: pk("thorough-robin-1114.clerk.accounts.dev"),
+      adminClerkUserId: "user_x",
+    };
+    const d = clerkCspDirectives(cfg);
+    expect(d["script-src"]).toEqual(["'self'", "https://thorough-robin-1114.clerk.accounts.dev"]);
+    expect(d["connect-src"]).toEqual(["'self'", "https://thorough-robin-1114.clerk.accounts.dev"]);
+    expect(d["frame-src"]).toEqual(["'self'", "https://thorough-robin-1114.clerk.accounts.dev"]);
+    // No unsafe-inline, no wildcards, no other directives touched
+    const flat = JSON.stringify(d);
+    expect(flat).not.toContain("unsafe-inline");
+    expect(flat).not.toContain("*");
+  });
+
+  it("CSP directives: dev-open (unconfigured) → empty (helmet defaults unchanged)", async () => {
+    const { clerkCspDirectives } = await import("../src/api/clerk.js");
+    expect(clerkCspDirectives({ clerkSecretKey: "", clerkPublishableKey: "", adminClerkUserId: "" })).toEqual({});
+    // sk_ present but pk malformed → still fail closed
+    expect(
+      clerkCspDirectives({ clerkSecretKey: "sk_test_1234567890", clerkPublishableKey: "junk", adminClerkUserId: "" }),
+    ).toEqual({});
   });
 });

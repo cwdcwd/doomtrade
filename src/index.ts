@@ -33,7 +33,7 @@ import { AgentManager } from "./agent/agent-manager.js";
 import { AgentTradeEngine } from "./engine/agent-trade-engine.js";
 import { getSetting, SETTING_KEYS } from "./db/settings-store.js";
 import { RiskLimitsSchema } from "./api/schemas.js";
-import { clerkEnabled } from "./api/clerk.js";
+import { clerkEnabled, clerkCspDirectives } from "./api/clerk.js";
 import type { Executor } from "./executor/executor.js";
 import type { PriceProvider } from "./engine/trade-engine.js";
 
@@ -273,20 +273,39 @@ async function main() {
   app.set("trust proxy", 1);
 
   // Middleware
-  app.use(helmet());
+  // helmet CSP: Clerk's Frontend API origin is added (script/connect/frame)
+  // ONLY when management auth is configured — derived from the publishable
+  // key at boot, never hardcoded (see clerkCspDirectives). In dev-open mode
+  // the directives object is empty and helmet's stock defaults apply
+  // unchanged. Other helmet protections (HSTS, nosniff, frameguard, …)
+  // keep their defaults.
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: clerkCspDirectives(config),
+      },
+    }),
+  );
   app.use(express.json());
 
-  // Clerk session verification + Frontend API proxy (/__clerk). Mounted
-  // globally and only when management auth is configured — in dev-open
-  // mode (CLERK_SECRET_KEY unset/malformed) no Clerk code runs at all.
-  // The proxy serves Clerk.js and the hosted sign-in same-origin, so the
-  // browser never talks to Clerk cross-origin and helmet's CSP holds.
+  // Clerk session verification for the management routes ONLY. Scoped to
+  // /api/management (fleet-ops-mmt.2): mounted globally, its handshake
+  // decorator 307-redirected every anonymous browser navigation to
+  // /__clerk/v1/client/handshake, breaking the public dashboard. getAuth /
+  // sessionUserId read req.auth only inside management routes; no public
+  // route passes through Clerk code. The same-origin /__clerk frontend API
+  // proxy is GONE (never registered in the Clerk dashboard → every
+  // /__clerk/v1/* call 400'd host_invalid): the browser loads clerk-js +
+  // @clerk/ui directly from the FAPI origin derived from the publishable
+  // key (see public/app.js loadClerkJs + clerkFapiOrigin). Mounted only
+  // when management auth is configured — in dev-open mode
+  // (CLERK_SECRET_KEY unset/malformed) no Clerk code runs at all.
   if (clerkEnabled(config)) {
     app.use(
+      "/api/management",
       clerkMiddleware({
         publishableKey: config.clerkPublishableKey,
         secretKey: config.clerkSecretKey,
-        frontendApiProxy: { enabled: true },
       }),
     );
   }

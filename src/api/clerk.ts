@@ -54,6 +54,63 @@ export function clerkEnabled(cfg: ClerkAuthConfig): boolean {
 }
 
 /**
+ * Clerk Frontend API origin (https://<slug>.clerk.accounts.dev) derived
+ * from a publishable key at runtime — no hardcoded domains.
+ *
+ * This is Clerk's own key encoding (see @clerk/shared parsePublishableKey
+ * / keys.mjs, which clerk-js also uses to pick its FAPI host when no
+ * proxy URL is set): the segment after pk_test_/pk_live_ is the base64
+ * encoding of "<frontendApi>$".
+ *
+ * Validation mirrors the SDK's isValidDecodedPublishableKey: the decoded
+ * value must end with exactly one '$' (at the last position) and contain
+ * a dot. Malformed keys return null — callers fail closed (no CSP
+ * origin, no script URL) rather than guessing.
+ */
+export function clerkFapiOrigin(publishableKey: string): string | null {
+  const match = /^pk_(?:test|live)_([A-Za-z0-9_-]+)$/.exec(publishableKey);
+  if (!match) return null;
+
+  // Node's "base64" decoder also accepts the URL-safe alphabet ('-' and
+  // '_') and never throws — it skips invalid chars. Malformed segments
+  // fail the '$'/dot validation below.
+  const decoded = Buffer.from(match[1], "base64").toString("utf8");
+
+  if (!decoded.endsWith("$") || decoded.indexOf("$") !== decoded.length - 1) {
+    return null; // must be exactly one '$', at the end
+  }
+  const host = decoded.slice(0, -1);
+  if (!host.includes(".")) return null;
+  return `https://${host}`;
+}
+
+/**
+ * helmet CSP directives allowing Clerk's Frontend API origin — added on
+ * top of helmet's defaults when management auth is configured:
+ *
+ *   script-src  — clerk-js + @clerk/ui browser bundles load from the
+ *                 FAPI origin (public/app.js loadClerkJs)
+ *   connect-src — clerk-js fetch/XHR to the FAPI origin
+ *   frame-src   — the Clerk sign-in modal iframe is hosted on the FAPI
+ *                 origin
+ *
+ * Returns {} (helmet's stock defaults, byte-for-byte unchanged) when
+ * Clerk is not configured (dev-open) or the key is malformed — the
+ * dashboard itself never needs these; only the sign-in flow does.
+ * No 'unsafe-inline', no wildcards, no hardcoded domains.
+ */
+export function clerkCspDirectives(cfg: ClerkAuthConfig): Record<string, string[]> {
+  if (!clerkEnabled(cfg)) return {};
+  const origin = clerkFapiOrigin(cfg.clerkPublishableKey);
+  if (!origin) return {};
+  return {
+    "script-src": ["'self'", origin],
+    "connect-src": ["'self'", origin],
+    "frame-src": ["'self'", origin],
+  };
+}
+
+/**
  * Session userId, read via the SDK's getAuth() rather than req.auth
  * directly: clerkMiddleware attaches req.auth as a branded FUNCTION
  * (req.auth(opts) returns the AuthObject), so req.auth?.userId was

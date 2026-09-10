@@ -199,35 +199,58 @@ setInterval(refresh, 10000); // one request per cycle — server caches upstream
 //   → panel stays hidden.
 // Configured + anonymous: /me includes the publishable key (public by
 //   design — pk_ is the ONLY Clerk value that ever reaches the browser)
-//   → Sign-in button, which loads Clerk.js via the same-origin /__clerk
-//   proxy and opens Clerk's hosted sign-in (username+password).
+//   → Sign-in button, which loads Clerk.js directly from Clerk's
+//   Frontend API origin derived from the pk (fleet-ops-mmt.2: the
+//   same-origin /__clerk proxy was never registered in the Clerk
+//   dashboard, so every /__clerk/v1/* call 400'd host_invalid) and opens
+//   Clerk's hosted sign-in (username+password). Session requests to our
+//   same-origin /api/management routes carry the __session cookie
+//   Clerk sets — no proxy needed.
 // Admin session: → risk-limits form (GET/PUT /api/management/risk-limits).
 const MGMT_FIELDS = [
   { key: 'maxOpenPositions',    label: 'Max open positions',    hint: '1–50',             step: '1' },
   { key: 'maxPositionSizePct',   label: 'Max position size %',  hint: '1–100 % of equity', step: 'any' },
   { key: 'dailyTradeLimit',      label: 'Daily trade limit',     hint: '1–100 trades/day',  step: '1' },
-  { key: 'maxDrawdownPct',       label: 'Max drawdown %',        hint: '1–50 %',            step: 'any' },
+  { key: 'maxDrawdownPct',       label: 'Max drawdown %',        hint: '1–50 %',           step: 'any' },
   { key: 'simStartingBalance',   label: 'Sim starting balance', hint: '> 0 (USD)',         step: 'any' },
   { key: 'simFeePct',           label: 'Sim fee %',             hint: '0–1 % per trade',   step: 'any' },
 ];
 
 function mgmtEl() { return document.getElementById('management'); }
 
-/** Load Clerk.js same-origin (server proxies /__clerk → Clerk FAPI). */
+/** Derive the Clerk Frontend API origin (https://…clerk.accounts.dev) from a pk_. */
+function clerkFapiOrigin(pk) {
+  const m = /^pk_(?:test|live)_([A-Za-z0-9_-]+)$/.exec(pk);
+  if (!m) return null;
+  let decoded;
+  try { decoded = atob(m[1].replace(/-/g, '+').replace(/_/g, '/')); }
+  catch (e) { return null; }
+  if (!decoded.endsWith('$') || decoded.indexOf('$') !== decoded.length - 1) return null;
+  const host = decoded.slice(0, -1);
+  return host.includes('.') ? 'https://' + host : null;
+}
+
+/**
+ * Load Clerk.js directly from the FAPI origin (derived from the pk above) —
+ * Clerk's own no-proxy pattern: without a proxy URL, clerk-js targets the
+ * Frontend API origin parsed from the publishable key. Lazy: only called
+ * from the Sign-in click handler.
+ */
 function loadClerkJs(publishableKey) {
   return new Promise((resolve, reject) => {
     if (window.Clerk) { resolve(window.Clerk); return; }
+    const fapi = clerkFapiOrigin(publishableKey);
+    if (!fapi) { reject(new Error('Invalid Clerk publishable key')); return; }
     const ui = document.createElement('script');
-    ui.src = '/__clerk/npm/@clerk/ui@1/dist/ui.browser.js';
+    ui.src = fapi + '/npm/@clerk/ui@1/dist/ui.browser.js';
     ui.async = true;
     ui.crossOrigin = 'anonymous';
     document.head.appendChild(ui);
     const js = document.createElement('script');
-    js.src = '/__clerk/npm/@clerk/clerk-js@6/dist/clerk.browser.js';
+    js.src = fapi + '/npm/@clerk/clerk-js@6/dist/clerk.browser.js';
     js.async = true;
     js.crossOrigin = 'anonymous';
     js.dataset.clerkPublishableKey = publishableKey;
-    js.dataset.clerkProxyUrl = '/__clerk';
     js.onload = async () => {
       try {
         await window.Clerk.load({ ui: { ClerkUI: window.__internal_ClerkUICtor } });
