@@ -2,6 +2,8 @@ node_modules/
 dist/
 *.js
 *.d.ts
+# Dashboard bundle — CSP requires external script (helmet: script-src 'self')
+!public/app.js
 *.js.map
 *.d.ts.map
 # Keep type declaration files
