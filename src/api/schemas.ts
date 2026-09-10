@@ -168,3 +168,25 @@ export const ListAgentTradesQuerySchema = z.object({
   offset: z.coerce.number().int().min(0).default(0),
 });
 export type ListAgentTradesQuery = z.infer<typeof ListAgentTradesQuerySchema>;
+
+// ── Management endpoints (Clerk-gated) ──────────────────────────
+
+/**
+ * Risk limits as managed via the management dashboard.
+ *
+ * These bounds are safety-critical: the values constrain both trade
+ * engines on every risk check, so anything outside these ranges is
+ * rejected outright by PUT /api/management/risk-limits.
+ *
+ * Env vars are boot defaults; once saved here, the DB row overrides
+ * them on every subsequent boot.
+ */
+export const RiskLimitsSchema = z.object({
+  maxOpenPositions: z.number().int().min(1).max(50),
+  maxPositionSizePct: z.number().min(1).max(100),
+  dailyTradeLimit: z.number().int().min(1).max(100),
+  maxDrawdownPct: z.number().min(1).max(50),
+  simStartingBalance: z.number().positive(),
+  simFeePct: z.number().min(0).max(1),
+});
+export type RiskLimits = z.infer<typeof RiskLimitsSchema>;

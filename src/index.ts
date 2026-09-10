@@ -9,6 +9,7 @@
 import express from "express";
 import helmet from "helmet";
 import rateLimit from "express-rate-limit";
+import { clerkMiddleware, clerkClient } from "@clerk/express";
 import { readFileSync } from "node:fs";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -19,7 +20,8 @@ import { SimulatedExchange } from "./executor/simulated.js";
 import { authGate } from "./api/auth.js";
 import { TradeEngine } from "./engine/trade-engine.js";
 import { Portfolio } from "./portfolio/portfolio.js";
-import { createApiRouter } from "./api/routes.js";
+import { createApiRouter, type AppState } from "./api/routes.js";
+import { createManagementRouter } from "./api/routes/management.js";
 import { createPublicCryptoMarketData, createMarketDataService } from "./market/market.js";
 import { PriceCache } from "./market/stock-price-cache.js";
 import { ResearchService } from "./research/research.js";
@@ -29,6 +31,9 @@ import { MomentumRotationStrategy } from "./themes/strategies/momentum-rotation.
 import { AgentDrivenStrategy } from "./themes/strategies/agent-driven.js";
 import { AgentManager } from "./agent/agent-manager.js";
 import { AgentTradeEngine } from "./engine/agent-trade-engine.js";
+import { getSetting, SETTING_KEYS } from "./db/settings-store.js";
+import { RiskLimitsSchema } from "./api/schemas.js";
+import { clerkEnabled } from "./api/clerk.js";
 import type { Executor } from "./executor/executor.js";
 import type { PriceProvider } from "./engine/trade-engine.js";
 
@@ -78,6 +83,25 @@ async function main() {
 
   // Initialize database — Postgres if DATABASE_URL is set, SQLite otherwise
   const db = await openDatabase({ path: config.databasePath, url: config.databaseUrl });
+
+  // Risk limits: env vars are boot defaults; a persisted settings row
+  // (written by PUT /api/management/risk-limits) overrides them on every
+  // boot. Mutating `config` in place means both trade engines — which hold
+  // this same reference — pick up the limits on their next risk check.
+  const persistedLimits = await getSetting(db, SETTING_KEYS.riskLimits);
+  if (persistedLimits) {
+    const parsed = RiskLimitsSchema.safeParse(persistedLimits);
+    if (parsed.success) {
+      config.maxOpenPositions = parsed.data.maxOpenPositions;
+      config.maxPositionSizePct = parsed.data.maxPositionSizePct;
+      config.dailyTradeLimit = parsed.data.dailyTradeLimit;
+      config.maxDrawdownPct = parsed.data.maxDrawdownPct;
+      config.simStartingBalance = parsed.data.simStartingBalance;
+      config.simFeePct = parsed.data.simFeePct;
+    } else {
+      console.warn("Persisted risk limits failed validation — using env defaults");
+    }
+  }
 
   // Initialize executor (sim or live based on mode)
   const executor = await createExecutor(config, db);
@@ -213,7 +237,7 @@ async function main() {
   priceCache.start();
 
   // App state (mutable for mode toggle)
-  const state = {
+  const state: AppState = {
     decisionStore,
     tradeEngine,
     portfolio,
@@ -230,6 +254,17 @@ async function main() {
     a2aCoordinator,
   };
 
+  // Clerk user lookup for GET /api/management/me (username display only).
+  // Server-side only — uses the secret key, never exposed to the client.
+  if (clerkEnabled(config)) {
+    state.clerkUserLookup = {
+      getUser: async (userId: string) => {
+        const user = await clerkClient.users.getUser(userId);
+        return { username: user.username ?? null };
+      },
+    };
+  }
+
   const app = express();
 
   // Railway proxies requests (X-Forwarded-For) — trust exactly one hop so
@@ -240,6 +275,21 @@ async function main() {
   // Middleware
   app.use(helmet());
   app.use(express.json());
+
+  // Clerk session verification + Frontend API proxy (/__clerk). Mounted
+  // globally and only when management auth is configured — in dev-open
+  // mode (CLERK_SECRET_KEY unset/malformed) no Clerk code runs at all.
+  // The proxy serves Clerk.js and the hosted sign-in same-origin, so the
+  // browser never talks to Clerk cross-origin and helmet's CSP holds.
+  if (clerkEnabled(config)) {
+    app.use(
+      clerkMiddleware({
+        publishableKey: config.clerkPublishableKey,
+        secretKey: config.clerkSecretKey,
+        frontendApiProxy: { enabled: true },
+      }),
+    );
+  }
 
   // Rate limiting — 300 requests per 15 minutes per IP.
   // 100 was too small: the dashboard fast-refreshes agents every 10s (~90 req/15min),
@@ -253,6 +303,13 @@ async function main() {
     message: { error: "Too many requests, please try again later" },
   });
   app.use("/api", apiLimiter);
+
+  // Management routes — mounted AFTER the rate limiter (unthrottled probes
+  // would let a third party hammer Clerk user lookups) but BEFORE authGate:
+  // the admin browser holds a Clerk session cookie, not the fleet API key.
+  // Enforced by src/api/clerk.ts guards. /api/management/me is the public
+  // status probe; risk-limits requires the admin session.
+  app.use("/api", createManagementRouter(state));
 
   // API authentication — split by client class (see authGate in src/api/auth.ts):
   //   Humans (dashboard browsers): read-only — all GETs public.
