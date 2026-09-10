@@ -51,10 +51,27 @@ export function clerkEnabled(cfg: ClerkAuthConfig): boolean {
   return isClerkSecretKey(cfg.clerkSecretKey) && cfg.clerkPublishableKey !== "";
 }
 
-/** Session userId as attached by clerkMiddleware (absent when not mounted). */
+/**
+ * Session userId as attached by clerkMiddleware (absent when not mounted).
+ *
+ * @clerk/express v2 sets `req.auth` to a branded function (brandRequestAuth)
+ * that returns the AuthObject when called. Reading `req.auth.userId` directly
+ * returns undefined because the function has no userId property. We detect
+ * the function form and call it; fall back to object access for older SDK
+ * versions or test stubs that set an object.
+ */
 export function sessionUserId(req: Request): string | null {
-  const auth = (req as Request & { auth?: { userId: string | null } }).auth;
-  return auth?.userId ?? null;
+  const auth = (req as Request & { auth?: unknown }).auth;
+  if (typeof auth === "function") {
+    const obj = (auth as (opts?: unknown) => { userId: string | null })(
+      undefined,
+    );
+    return obj?.userId ?? null;
+  }
+  if (auth != null && typeof auth === "object") {
+    return (auth as { userId: string | null }).userId ?? null;
+  }
+  return null;
 }
 
 /**

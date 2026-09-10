@@ -66,6 +66,11 @@ function makeConfig(overrides: Partial<Config> = {}) {
  * Build a test app around the REAL management router.
  * `sessionUserId` (may be null) is attached to req.auth by a stub
  * middleware that mirrors what clerkMiddleware produces upstream.
+ *
+ * @clerk/express v2 brands req.auth as a FUNCTION (brandRequestAuth)
+ * that returns an AuthObject when called. The test stub must match
+ * this shape, not the old {userId} object, or it won't exercise the
+ * same code path that runs in production.
  */
 function makeApp(
   state: AppState,
@@ -75,9 +80,13 @@ function makeApp(
   app.use(express.json());
   if (sessionUserId !== undefined) {
     app.use((req, _res, next) => {
-      (req as { auth?: unknown }).auth = sessionUserId
+      // Match real clerkMiddleware: req.auth is a function returning
+      // an AuthObject with userId. Brand it with the Clerk symbol so
+      // requestHasAuthObject would recognize it (for completeness).
+      const authObj = sessionUserId
         ? { userId: sessionUserId }
         : { userId: null };
+      (req as { auth: unknown }).auth = () => authObj;
       next();
     });
   }
