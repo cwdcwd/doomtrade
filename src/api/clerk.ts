@@ -63,9 +63,7 @@ export function clerkEnabled(cfg: ClerkAuthConfig): boolean {
 export function sessionUserId(req: Request): string | null {
   const auth = (req as Request & { auth?: unknown }).auth;
   if (typeof auth === "function") {
-    const obj = (auth as (opts?: unknown) => { userId: string | null })(
-      undefined,
-    );
+    const obj = (auth as (opts?: unknown) => { userId: string | null })(undefined);
     return obj?.userId ?? null;
   }
   if (auth != null && typeof auth === "object") {

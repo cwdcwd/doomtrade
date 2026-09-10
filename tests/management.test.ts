@@ -72,10 +72,7 @@ function makeConfig(overrides: Partial<Config> = {}) {
  * this shape, not the old {userId} object, or it won't exercise the
  * same code path that runs in production.
  */
-function makeApp(
-  state: AppState,
-  sessionUserId: string | null | undefined,
-): express.Express {
+function makeApp(state: AppState, sessionUserId: string | null | undefined): express.Express {
   const app = express();
   app.use(express.json());
   if (sessionUserId !== undefined) {
@@ -83,9 +80,7 @@ function makeApp(
       // Match real clerkMiddleware: req.auth is a function returning
       // an AuthObject with userId. Brand it with the Clerk symbol so
       // requestHasAuthObject would recognize it (for completeness).
-      const authObj = sessionUserId
-        ? { userId: sessionUserId }
-        : { userId: null };
+      const authObj = sessionUserId ? { userId: sessionUserId } : { userId: null };
       (req as { auth: unknown }).auth = () => authObj;
       next();
     });
@@ -187,7 +182,9 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
   });
 
   function userLookup(username: string) {
-    return { getUser: async (userId: string) => ({ username: userId === ADMIN_ID ? username : "other" }) };
+    return {
+      getUser: async (userId: string) => ({ username: userId === ADMIN_ID ? username : "other" }),
+    };
   }
 
   it("/me: anonymous (no session) → {authenticated:false} + publishable key", async () => {
@@ -286,19 +283,19 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
     const app = makeApp(state, ADMIN_ID);
 
     const badBodies = [
-      { ...VALID_LIMITS, maxOpenPositions: 0 },        // < 1
-      { ...VALID_LIMITS, maxOpenPositions: 51 },       // > 50
-      { ...VALID_LIMITS, maxPositionSizePct: 0 },      // < 1
-      { ...VALID_LIMITS, maxPositionSizePct: 101 },    // > 100
-      { ...VALID_LIMITS, dailyTradeLimit: 0 },         // < 1
-      { ...VALID_LIMITS, dailyTradeLimit: 101 },       // > 100
-      { ...VALID_LIMITS, maxDrawdownPct: 0 },          // < 1
-      { ...VALID_LIMITS, maxDrawdownPct: 51 },         // > 50
-      { ...VALID_LIMITS, simStartingBalance: 0 },      // not > 0
-      { ...VALID_LIMITS, simStartingBalance: -5 },     // negative
-      { ...VALID_LIMITS, simFeePct: -0.01 },           // < 0
-      { ...VALID_LIMITS, simFeePct: 1.01 },            // > 1
-      { ...VALID_LIMITS, maxOpenPositions: 5.5 },      // non-integer
+      { ...VALID_LIMITS, maxOpenPositions: 0 }, // < 1
+      { ...VALID_LIMITS, maxOpenPositions: 51 }, // > 50
+      { ...VALID_LIMITS, maxPositionSizePct: 0 }, // < 1
+      { ...VALID_LIMITS, maxPositionSizePct: 101 }, // > 100
+      { ...VALID_LIMITS, dailyTradeLimit: 0 }, // < 1
+      { ...VALID_LIMITS, dailyTradeLimit: 101 }, // > 100
+      { ...VALID_LIMITS, maxDrawdownPct: 0 }, // < 1
+      { ...VALID_LIMITS, maxDrawdownPct: 51 }, // > 50
+      { ...VALID_LIMITS, simStartingBalance: 0 }, // not > 0
+      { ...VALID_LIMITS, simStartingBalance: -5 }, // negative
+      { ...VALID_LIMITS, simFeePct: -0.01 }, // < 0
+      { ...VALID_LIMITS, simFeePct: 1.01 }, // > 1
+      { ...VALID_LIMITS, maxOpenPositions: 5.5 }, // non-integer
     ];
 
     for (const body of badBodies) {
@@ -322,11 +319,14 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
   });
 
   it("fail-closed: configured but ADMIN_CLERK_USER_ID empty → even admin-ish session 403", async () => {
-    const state = makeState(db, makeConfig({
-      clerkSecretKey: "sk_mocksecretkey_000001",
-      clerkPublishableKey: "pk_mock_000001",
-      adminClerkUserId: "",
-    }));
+    const state = makeState(
+      db,
+      makeConfig({
+        clerkSecretKey: "sk_mocksecretkey_000001",
+        clerkPublishableKey: "pk_mock_000001",
+        adminClerkUserId: "",
+      }),
+    );
     const app = makeApp(state, ADMIN_ID);
     const res = await supertest(app).get("/api/management/risk-limits");
     expect(res.status).toBe(403);
@@ -348,8 +348,8 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
       config.maxOpenPositions = parsed.data.maxOpenPositions;
       config.dailyTradeLimit = parsed.data.dailyTradeLimit;
     }
-    expect(config.maxOpenPositions).toBe(5);      // DB row won
-    expect(config.dailyTradeLimit).toBe(30);      // DB row won
+    expect(config.maxOpenPositions).toBe(5); // DB row won
+    expect(config.dailyTradeLimit).toBe(30); // DB row won
   });
 });
 
@@ -373,6 +373,12 @@ describe("Clerk guard unit tests (src/api/clerk.ts)", () => {
 
   it("isAdminUser: no configured admin → false (fail closed)", async () => {
     const { isAdminUser } = await import("../src/api/clerk.js");
-    expect(isAdminUser("user_x", { clerkSecretKey: "sk_mock_x", clerkPublishableKey: "pk", adminClerkUserId: "" })).toBe(false);
+    expect(
+      isAdminUser("user_x", {
+        clerkSecretKey: "sk_mock_x",
+        clerkPublishableKey: "pk",
+        adminClerkUserId: "",
+      }),
+    ).toBe(false);
   });
 });
