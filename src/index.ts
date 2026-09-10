@@ -254,11 +254,14 @@ async function main() {
   });
   app.use("/api", apiLimiter);
 
-  // API authentication — protects all /api routes except /api/health
-  // If DOOMTRADE_API_KEY is not set, auth is disabled (local dev only)
+  // API authentication — split by client class:
+  //   Humans (dashboard browsers): read-only — all GETs public.
+  //   Machines (fleet crons, A2A): mutations (POST/PATCH/DELETE) key-gated.
+  // If DOOMTRADE_API_KEY is not set, auth is disabled (local dev only).
   const authMiddleware = apiKeyAuth(config.apiKey);
   app.use("/api", (req, res, next) => {
-    if (req.path === "/health") return next();
+    // Public: health (Railway healthcheck) + everything a browser reads
+    if (req.path === "/health" || req.method === "GET") return next();
     authMiddleware(req, res, next);
   });
 

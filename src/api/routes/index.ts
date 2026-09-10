@@ -11,6 +11,7 @@ export { type AppState } from "./types.js";
 export { MODE_COOLDOWN_SECONDS } from "./types.js";
 
 import { createHealthRouter, createAdminRouter } from "./health.js";
+import { createDashboardRouter } from "./dashboard.js";
 import { createDecisionsRouter } from "./decisions.js";
 import { createTradesRouter } from "./trades.js";
 import { createPortfolioRouter } from "./portfolio.js";
@@ -31,6 +32,7 @@ export function createApiRouter(state: AppState): Router {
   const router = Router();
 
   router.use(createHealthRouter(state));
+  router.use(createDashboardRouter(state));
   router.use(createDecisionsRouter(state));
   router.use(createTradesRouter(state));
   router.use(createPortfolioRouter(state));

@@ -1,81 +1,97 @@
+/**
+ * Auth policy tests — read-only public GETs, key-gated mutations.
+ *
+ * Policy (matches src/index.ts wiring):
+ *   - GET /api/*            → public (dashboard browsers, no key)
+ *   - POST/PATCH/DELETE     → requires API key (fleet crons, A2A)
+ *   - /api/health           → always public (Railway healthcheck)
+ *   - No DOOMTRADE_API_KEY  → auth disabled (local dev)
+ */
+
 import { describe, it, expect } from "vitest";
 import express from "express";
 import request from "supertest";
 import { apiKeyAuth } from "../src/api/auth.js";
 
+/** Mirrors the gate wired in src/index.ts. */
 function makeApp(key: string) {
   const app = express();
   app.use(express.json());
   const auth = apiKeyAuth(key);
   app.use("/api", (req, res, next) => {
-    if (req.path === "/health") return next();
+    if (req.path === "/health" || req.method === "GET") return next();
     auth(req, res, next);
   });
   app.get("/api/health", (_req, res) => res.json({ status: "ok" }));
-  app.get("/api/portfolio", (_req, res) => res.json({ equity: 100000 }));
+  app.get("/api/dashboard", (_req, res) => res.json({ agents: [] }));
+  app.get("/api/agents", (_req, res) => res.json({ agents: [] }));
+  app.post("/api/agents", (_req, res) => res.status(201).json({ created: true }));
+  app.patch("/api/agents/:id", (_req, res) => res.json({ updated: true }));
+  app.delete("/api/agents/:id", (_req, res) => res.json({ deactivated: true }));
   app.post("/api/trade", (_req, res) => res.json({ filled: true }));
+  app.post("/api/admin/reset", (_req, res) => res.json({ reset: true }));
   return app;
 }
 
-describe("API Key Auth", () => {
-  describe("when API key is not set (local dev)", () => {
-    const app = makeApp("");
-
-    it("allows all requests without auth header", async () => {
-      const res = await request(app).get("/api/portfolio");
-      expect(res.status).toBe(200);
-    });
-
-    it("allows trade execution without auth", async () => {
-      const res = await request(app).post("/api/trade").send({});
-      expect(res.status).toBe(200);
-    });
-  });
-
-  describe("when API key is set", () => {
+describe("API auth policy — public reads, keyed writes", () => {
+  describe("when API key is set (production)", () => {
     const KEY = "secret-test-key-123";
     const app = makeApp(KEY);
 
-    it("rejects requests without auth header (401)", async () => {
-      const res = await request(app).get("/api/portfolio");
+    it("GET /api/health is public", async () => {
+      const res = await request(app).get("/api/health");
+      expect(res.status).toBe(200);
+    });
+
+    it("GET /api/dashboard is public (read-only dashboard, no key)", async () => {
+      const res = await request(app).get("/api/dashboard");
+      expect(res.status).toBe(200);
+      expect(res.body.agents).toEqual([]);
+    });
+
+    it("GET /api/agents is public", async () => {
+      const res = await request(app).get("/api/agents");
+      expect(res.status).toBe(200);
+    });
+
+    it("POST /api/agents requires the key (401 without)", async () => {
+      const res = await request(app).post("/api/agents").send({});
       expect(res.status).toBe(401);
       expect(res.body.error).toBe("Unauthorized");
     });
 
-    it("rejects requests with wrong key (401)", async () => {
+    it("POST /api/agents accepts Bearer key", async () => {
       const res = await request(app)
-        .get("/api/portfolio")
-        .set("Authorization", "Bearer wrong-key");
+        .post("/api/agents")
+        .set("Authorization", `Bearer ${KEY}`)
+        .send({});
+      expect(res.status).toBe(201);
+    });
+
+    it("POST /api/agents accepts X-API-Key header", async () => {
+      const res = await request(app)
+        .post("/api/agents")
+        .set("X-API-Key", KEY)
+        .send({});
+      expect(res.status).toBe(201);
+    });
+
+    it("PATCH /api/agents/:id requires the key", async () => {
+      const res = await request(app).patch("/api/agents/abc").send({});
       expect(res.status).toBe(401);
     });
 
-    it("accepts Bearer token auth", async () => {
-      const res = await request(app)
-        .get("/api/portfolio")
-        .set("Authorization", `Bearer ${KEY}`);
-      expect(res.status).toBe(200);
-      expect(res.body.equity).toBe(100000);
+    it("DELETE /api/agents/:id requires the key", async () => {
+      const res = await request(app).delete("/api/agents/abc");
+      expect(res.status).toBe(401);
     });
 
-    it("accepts X-API-Key header auth", async () => {
-      const res = await request(app)
-        .get("/api/portfolio")
-        .set("X-API-Key", KEY);
-      expect(res.status).toBe(200);
-    });
-
-    it("allows /api/health without auth (Railway healthcheck)", async () => {
-      const res = await request(app).get("/api/health");
-      expect(res.status).toBe(200);
-      expect(res.body.status).toBe("ok");
-    });
-
-    it("rejects trade execution without auth (401)", async () => {
+    it("POST /api/trade requires the key", async () => {
       const res = await request(app).post("/api/trade").send({});
       expect(res.status).toBe(401);
     });
 
-    it("accepts trade execution with correct key", async () => {
+    it("POST /api/trade accepts Bearer key (fleet cron path)", async () => {
       const res = await request(app)
         .post("/api/trade")
         .set("Authorization", `Bearer ${KEY}`)
@@ -84,11 +100,40 @@ describe("API Key Auth", () => {
       expect(res.body.filled).toBe(true);
     });
 
-    it("rejects malformed Authorization header", async () => {
-      const res = await request(app)
-        .get("/api/portfolio")
-        .set("Authorization", "Token abc");
+    it("POST /api/admin/reset requires the key", async () => {
+      const res = await request(app).post("/api/admin/reset").send({});
       expect(res.status).toBe(401);
+    });
+
+    it("rejects wrong key on mutations", async () => {
+      const res = await request(app)
+        .post("/api/trade")
+        .set("Authorization", "Bearer wrong-key")
+        .send({});
+      expect(res.status).toBe(401);
+    });
+
+    it("rejects malformed Authorization header on mutations", async () => {
+      const res = await request(app)
+        .post("/api/trade")
+        .set("Authorization", "Token abc")
+        .send({});
+      expect(res.status).toBe(401);
+    });
+  });
+
+  describe("when API key is not set (local dev)", () => {
+    const app = makeApp("");
+
+    it("allows reads without auth header", async () => {
+      const res = await request(app).get("/api/dashboard");
+      expect(res.status).toBe(200);
+    });
+
+    it("allows trade execution without auth (local dev)", async () => {
+      const res = await request(app).post("/api/trade").send({});
+      expect(res.status).toBe(200);
+      expect(res.body.filled).toBe(true);
     });
   });
 });
