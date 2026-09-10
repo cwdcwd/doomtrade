@@ -72,14 +72,27 @@ export function createDashboardRouter(state: AppState): Router {
       const details = await Promise.all(
         agents.map(async (a) => {
           const [portfolio, positions, trades, analytics] = await Promise.all([
-            cache.get(`pf:${a.id}`, 5_000, () =>
-              state.agentTradeEngine?.getPortfolio(a.id) ?? Promise.resolve(null)),
-            cache.get(`pos:${a.id}`, 5_000, () =>
-              state.agentTradeEngine?.getPositions(a.id) ?? Promise.resolve([])),
-            cache.get(`trd:${a.id}`, 5_000, () =>
-              state.agentTradeEngine?.getTrades(a.id, RECENT_TRADES_LIMIT) ?? Promise.resolve([])),
-            cache.get(`ana:${a.id}`, 5_000, () =>
-              state.agentTradeEngine?.getAnalytics(a.id) ?? Promise.resolve(null)),
+            cache.get(
+              `pf:${a.id}`,
+              5_000,
+              () => state.agentTradeEngine?.getPortfolio(a.id) ?? Promise.resolve(null),
+            ),
+            cache.get(
+              `pos:${a.id}`,
+              5_000,
+              () => state.agentTradeEngine?.getPositions(a.id) ?? Promise.resolve([]),
+            ),
+            cache.get(
+              `trd:${a.id}`,
+              5_000,
+              () =>
+                state.agentTradeEngine?.getTrades(a.id, RECENT_TRADES_LIMIT) ?? Promise.resolve([]),
+            ),
+            cache.get(
+              `ana:${a.id}`,
+              5_000,
+              () => state.agentTradeEngine?.getAnalytics(a.id) ?? Promise.resolve(null),
+            ),
           ]);
           return { agent: a, portfolio, positions, trades, analytics };
         }),
@@ -101,9 +114,7 @@ export function createDashboardRouter(state: AppState): Router {
           try {
             const analysis = await cache.get(`rsrch:${symbol}`, 300_000, () => {
               if (!state.research) return Promise.resolve(null);
-              return state.research
-                .analyze(symbol, "1Day", "1m")
-                .catch(() => null);
+              return state.research.analyze(symbol, "1Day", "1m").catch(() => null);
             });
             return { symbol, analysis };
           } catch {
