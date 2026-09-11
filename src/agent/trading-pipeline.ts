@@ -223,7 +223,12 @@ export class AgentTradingPipeline {
           indicator: { type: "combined", periods: { fast: 20, slow: 50 }, rsiPeriod: 14 },
           topN: 3,
           timeframe: "1Day",
-          range: "1m",
+          // "6m" (~180 daily bars), not "1m" (~30): smaCrossover needs
+          // slowPeriod+1 = 51 bars to ever emit a signal. With 30 bars it
+          // returns "neutral" unconditionally, so the combined indicator
+          // can never fire and momentum-rotation agents never trade
+          // (fleet-ops-p1j — 53 hourly cycles, 0 signals, 0 errors).
+          range: "6m",
         };
       case "congress-follower":
         return {

@@ -153,4 +153,58 @@ describe("AgentTradingPipeline", () => {
     expect(results[0].equityAfter).toBe(100); // noop strategy, no trades
     expect(results[0].pnlChange).toBe(0);
   });
+
+  // fleet-ops-p1j: momentum-rotation must request enough bars for its
+  // slowest indicator. With range "1m" (~30 daily bars) smaCrossover
+  // (fast 20 / slow 50) needs 51 values and returns "neutral"
+  // unconditionally — the agent could never trade, silently.
+  it("momentum-rotation params request enough bars for the slowest indicator", async () => {
+    const seenConfigs: ThemeConfig[] = [];
+    class CapturingStrategy implements ThemeStrategy {
+      readonly type = "momentum-rotation";
+      async evaluate(_ctx: ThemeContext, config: ThemeConfig): Promise<ThemeEvaluationResult> {
+        seenConfigs.push(config);
+        return {
+          themeId: config.id,
+          timestamp: new Date().toISOString(),
+          signals: [],
+          decisions: [],
+          trades: [],
+          errors: [],
+        };
+      }
+    }
+
+    const strategies = new Map<string, ThemeStrategy>();
+    strategies.set("momentum-rotation", new CapturingStrategy());
+
+    const pipeline = new AgentTradingPipeline({
+      agentManager: manager,
+      marketData: mockMarketData,
+      db,
+      strategies,
+      defaultUniverse: ["ETH/USDT"],
+    });
+
+    await manager.register("Doom", { startingBalance: 100, strategy: "momentum-rotation" });
+
+    await pipeline.runCycle();
+
+    expect(seenConfigs).toHaveLength(1);
+    const params = seenConfigs[0].params as {
+      range: string;
+      indicator: { type: string; periods: { fast: number; slow: number } };
+    };
+    expect(params.indicator.periods.slow).toBeGreaterThan(0);
+
+    // Mirror ccxt-data parseRangeDays: "6m" → 180 days ≈ 180 daily bars.
+    const match = params.range.match(/^(\d+)([dwmy])$/);
+    expect(match).not.toBeNull();
+    const n = parseInt(match![1], 10);
+    const days =
+      match![2] === "d" ? n : match![2] === "w" ? n * 7 : match![2] === "m" ? n * 30 : n * 365;
+    // smaCrossover requires slow + 1 closes; this is the strict minimum —
+    // anything less means the indicator can never emit a signal.
+    expect(days).toBeGreaterThanOrEqual(params.indicator.periods.slow + 1);
+  });
 });
