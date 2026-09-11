@@ -193,6 +193,13 @@ export class ThemeStore {
   }
 
   async delete(id: string): Promise<boolean> {
+    // Check existence first — deleting an unknown id must report false
+    // (fleet-ops-b3u: previously returned true because the post-delete
+    // getById was null for themes that never existed, so the API route
+    // answered 200 {deleted:true} instead of 404 for unknown ids).
+    const existing = await this.getById(id);
+    if (!existing) return false;
+
     const sql = convertPlaceholders("DELETE FROM themes WHERE id = ?", this.db.backend);
     await execRun(this.db, sql, [id]);
     const check = await this.getById(id);
