@@ -101,6 +101,7 @@ Set these in Railway → Variables:
 | `MAX_DRAWDOWN_PCT` | No | `15` | Max drawdown before blocking trades |
 | `SIM_STARTING_BALANCE` | No | `100000` | Sim paper money balance |
 | `SIM_FEE_PCT` | No | `0.1` | Sim fee percentage |
+| `BARGO_API_KEY` | No | — | Bargo Congress Trades key (free at [bargo.ai/free-apis/dash](https://www.bargo.ai/free-apis/dash)). Without it the anonymous tier is 30 req/day/IP; the app caches responses 15 min and serves the last good payload once quota is exhausted |
 
 ### Deploy Steps
 

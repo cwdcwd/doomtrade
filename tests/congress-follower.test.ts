@@ -8,7 +8,11 @@ import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { openDatabase, closeDatabase, type DbClient } from "../src/db/database.js";
 import { ThemeStore } from "../src/themes/theme-store.js";
 import { ThemeSubAccount } from "../src/themes/theme-sub-account.js";
-import { CongressTradesSignalSource } from "../src/themes/sources/congress-trades.js";
+import {
+  CongressTradesSignalSource,
+  BargoRateLimitError,
+  __resetBargoCache,
+} from "../src/themes/sources/congress-trades.js";
 import { CongressFollowerStrategy } from "../src/themes/strategies/congress-follower.js";
 import type { ThemeContext } from "../src/themes/strategy.js";
 import type { ThemeConfig } from "../src/themes/theme.js";
@@ -16,6 +20,7 @@ import type { ThemeConfig } from "../src/themes/theme.js";
 let db: DbClient;
 
 beforeEach(async () => {
+  __resetBargoCache();
   db = await openDatabase({ path: ":memory:" });
 });
 
@@ -36,7 +41,7 @@ describe("CongressTradesSignalSource", () => {
           amount_range: "$1,001 - $15,000",
           transaction_date: "2026-08-15",
           disclosure_date: "2026-09-01",
-          est_price: 120.50,
+          est_price: 120.5,
           recent_price: 180.25,
           perf_pct: 49.6,
           outcome: "winner",
@@ -53,8 +58,8 @@ describe("CongressTradesSignalSource", () => {
           amount_range: "$50,001 - $100,000",
           transaction_date: "2026-08-10",
           disclosure_date: "2026-08-25",
-          est_price: 195.00,
-          recent_price: 190.00,
+          est_price: 195.0,
+          recent_price: 190.0,
           perf_pct: -2.6,
           outcome: "loser",
           filing_portal: "https://disclosures-clerk.house.gov",
@@ -70,8 +75,8 @@ describe("CongressTradesSignalSource", () => {
           amount_range: "$1,001 - $15,000",
           transaction_date: "2026-08-05",
           disclosure_date: "2026-08-20",
-          est_price: 450.00,
-          recent_price: 455.00,
+          est_price: 450.0,
+          recent_price: 455.0,
           perf_pct: 1.1,
           outcome: null,
           filing_portal: "https://disclosures-clerk.house.gov",
@@ -94,7 +99,7 @@ describe("CongressTradesSignalSource", () => {
     expect(signals).toHaveLength(2);
     expect(signals[0].symbol).toBe("NVDA");
     expect(signals[0].action).toBe("buy");
-    expect(signals[0].priceAtSignal).toBe(120.50);
+    expect(signals[0].priceAtSignal).toBe(120.5);
     expect(signals[0].reason).toContain("Nancy Pelosi");
     expect(signals[0].reason).toContain("bought");
 
@@ -117,8 +122,8 @@ describe("CongressTradesSignalSource", () => {
           amount_range: "$100,001 - $250,000",
           transaction_date: "2026-09-10",
           disclosure_date: "2026-09-17",
-          est_price: 150.00,
-          recent_price: 160.00,
+          est_price: 150.0,
+          recent_price: 160.0,
           perf_pct: 6.7,
           outcome: "winner",
           filing_portal: "https://efdsearch.senate.gov",
@@ -148,16 +153,192 @@ describe("CongressTradesSignalSource", () => {
   it("handles API error", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
       ok: false,
-      status: 429,
-      statusText: "Too Many Requests",
+      status: 500,
+      statusText: "Internal Server Error",
       json: async () => ({}),
     } as Response);
 
     const source = new CongressTradesSignalSource({ member: "Pelosi" });
-    await expect(source.fetchSignals()).rejects.toThrow("Bargo API error: 429");
+    await expect(source.fetchSignals()).rejects.toThrow("Bargo API error: 500");
+  });
+
+  it("throws typed BargoRateLimitError on 429 with no cache available", async () => {
+    __resetBargoCache();
+    vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
+      ok: false,
+      status: 429,
+      statusText: "Too Many Requests",
+      json: async () => ({ error: "Rate limit" }),
+    } as Response);
+
+    const source = new CongressTradesSignalSource({ member: "Pelosi" });
+    const err = await source.fetchSignals().then(
+      () => null,
+      (e) => e,
+    );
+    expect(err).toBeInstanceOf(BargoRateLimitError);
+    expect((err as BargoRateLimitError).preempted).toBe(false);
+    expect((err as Error).message).toContain("30 req/day");
+  });
+
+  it("serves cached payload within TTL without a second fetch", async () => {
+    __resetBargoCache();
+    const mockTrades = {
+      trades: [
+        {
+          member: "Nancy Pelosi",
+          member_slug: "nancy-pelosi",
+          chamber: "house",
+          state: "CA11",
+          ticker: "BE",
+          asset: "Bloom Energy",
+          type: "purchase",
+          amount_range: "$1,001 - $15,000",
+          transaction_date: "2026-09-01",
+          disclosure_date: "2026-09-10",
+          est_price: 166.84,
+          recent_price: 252.87,
+          perf_pct: 51.56,
+          outcome: null,
+          filing_portal: "https://disclosures-clerk.house.gov",
+        },
+      ],
+      page: 0,
+      limit: 100,
+      count: 1,
+    };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => mockTrades,
+      headers: new Headers({ "x-ratelimit-remaining": "30" }),
+    } as unknown as Response);
+
+    const first = new CongressTradesSignalSource({ member: "Pelosi" });
+    const second = new CongressTradesSignalSource({ member: "Pelosi" });
+    const s1 = await first.fetchSignals();
+    const s2 = await second.fetchSignals();
+
+    // Fresh instances (as the pipeline creates per evaluation) share the
+    // module-level cache: one network hit serves both.
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(s2).toEqual(s1);
+    expect(s1[0].symbol).toBe("BE");
+  });
+
+  it("serves stale payload on 429 instead of failing the cycle", async () => {
+    __resetBargoCache();
+    const mockTrades = {
+      trades: [],
+      page: 0,
+      limit: 100,
+      count: 0,
+    };
+
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => mockTrades,
+        headers: new Headers({ "x-ratelimit-remaining": "30" }),
+      } as unknown as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: "Too Many Requests",
+        json: async () => ({ error: "Rate limit" }),
+      } as Response);
+
+    const first = new CongressTradesSignalSource({ member: "Pelosi" });
+    const second = new CongressTradesSignalSource({ member: "Pelosi", cacheTtlMs: 0 });
+
+    // Prime the cache with a fresh payload, then force a cache-miss path
+    // to a 429 by expiring the TTL to zero.
+    const s1 = await first.fetchSignals();
+    const s2 = await second.fetchSignals();
+
+    expect(fetchSpy).toHaveBeenCalledTimes(2);
+    expect(Array.isArray(s2)).toBe(true); // stale payload served, not thrown
+    expect(s2).toEqual(s1);
+  });
+
+  it("quota-blocks the URL at the remaining<=3 floor without extra fetches", async () => {
+    __resetBargoCache();
+    const mockTrades = { trades: [], page: 0, limit: 100, count: 0 };
+
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => mockTrades,
+      headers: new Headers({ "x-ratelimit-remaining": "3" }),
+    } as unknown as Response);
+
+    const first = new CongressTradesSignalSource({ member: "Pelosi" });
+    await first.fetchSignals(); // hit 1: writes cache + sets quota block
+
+    const second = new CongressTradesSignalSource({ member: "Pelosi" });
+    const s2 = await second.fetchSignals(); // served from cache, no fetch
+
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    expect(Array.isArray(s2)).toBe(true);
+  });
+
+  it("throws preempted BargoRateLimitError when quota-blocked with no cache", async () => {
+    __resetBargoCache();
+    const fetchSpy = vi
+      .spyOn(globalThis, "fetch")
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: "Too Many Requests",
+        json: async () => ({ error: "Rate limit" }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 429,
+        statusText: "Too Many Requests",
+        json: async () => ({ error: "Rate limit" }),
+      } as Response);
+
+    // First call: 429 with no cache -> URL blocked until UTC midnight,
+    // typed (non-preempted) error.
+    const first = new CongressTradesSignalSource({ member: "Pelosi" });
+    const err1 = await first.fetchSignals().then(
+      () => null,
+      (e) => e,
+    );
+    expect(err1).toBeInstanceOf(BargoRateLimitError);
+    expect((err1 as BargoRateLimitError).preempted).toBe(false);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+
+    // Second call: URL is quota-blocked, still no cache entry -> no network
+    // call at all, preempted error.
+    const second = new CongressTradesSignalSource({ member: "Pelosi" });
+    const err2 = await second.fetchSignals().then(
+      () => null,
+      (e) => e,
+    );
+    expect(err2).toBeInstanceOf(BargoRateLimitError);
+    expect((err2 as BargoRateLimitError).preempted).toBe(true);
+    expect(fetchSpy).toHaveBeenCalledTimes(1); // no extra network hit
+  });
+
+  it("sends X-Api-Key header when apiKey configured", async () => {
+    __resetBargoCache();
+    const fetchSpy = vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => ({ trades: [], page: 0, limit: 100, count: 0 }),
+      headers: new Headers({ "x-ratelimit-remaining": "30" }),
+    } as unknown as Response);
+
+    const source = new CongressTradesSignalSource({ member: "Pelosi", apiKey: "test-key-123" });
+    await source.fetchSignals();
+
+    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    expect(new Headers(init.headers).get("X-Api-Key")).toBe("test-key-123");
   });
 
   afterEach(() => {
+    __resetBargoCache();
     vi.restoreAllMocks();
   });
 });
@@ -225,8 +406,8 @@ describe("CongressFollowerStrategy", () => {
             amount_range: "$1,001 - $15,000",
             transaction_date: "2026-09-10",
             disclosure_date: "2026-09-15",
-            est_price: 120.00,
-            recent_price: 180.00,
+            est_price: 120.0,
+            recent_price: 180.0,
             perf_pct: 50,
             outcome: "winner",
             filing_portal: "https://disclosures-clerk.house.gov",
@@ -263,7 +444,7 @@ describe("CongressFollowerStrategy", () => {
     // Initialize sub-account
     const sub = new ThemeSubAccount(db, theme.id, {
       feeRate: 0,
-      getCurrentPrice: (sym) => sym === "NVDA" ? 120 : null,
+      getCurrentPrice: (sym) => (sym === "NVDA" ? 120 : null),
     });
     await sub.initialize(50_000);
 
@@ -283,8 +464,8 @@ describe("CongressFollowerStrategy", () => {
             amount_range: "$1,001 - $15,000",
             transaction_date: "2026-09-10",
             disclosure_date: "2026-09-15",
-            est_price: 120.00,
-            recent_price: 180.00,
+            est_price: 120.0,
+            recent_price: 180.0,
             perf_pct: 50,
             outcome: "winner",
             filing_portal: "https://disclosures-clerk.house.gov",
@@ -325,10 +506,7 @@ describe("CongressFollowerStrategy", () => {
     expect(result.errors).toHaveLength(0);
 
     // Verify signal was deduped
-    const processed = await store.isSignalProcessed(
-      theme.id,
-      "nancy-pelosi-NVDA-2026-09-10-buy",
-    );
+    const processed = await store.isSignalProcessed(theme.id, "nancy-pelosi-NVDA-2026-09-10-buy");
     expect(processed).toBe(true);
 
     vi.restoreAllMocks();
@@ -342,12 +520,12 @@ describe("CongressFollowerStrategy", () => {
       schedule: { type: "manual" },
       params: { politician: "Pelosi" },
       allocatedCapital: 50_000,
-      maxAllocationPct: 10,  // 10% of 50,000 = 5,000 max allocation
+      maxAllocationPct: 10, // 10% of 50,000 = 5,000 max allocation
     });
 
     const sub = new ThemeSubAccount(db, theme.id, {
       feeRate: 0,
-      getCurrentPrice: (sym) => sym === "NVDA" ? 120 : null,
+      getCurrentPrice: (sym) => (sym === "NVDA" ? 120 : null),
     });
     await sub.initialize(50_000);
 
@@ -367,8 +545,8 @@ describe("CongressFollowerStrategy", () => {
             amount_range: "$1,001 - $15,000",
             transaction_date: "2026-09-10",
             disclosure_date: "2026-09-15",
-            est_price: 120.00,
-            recent_price: 180.00,
+            est_price: 120.0,
+            recent_price: 180.0,
             perf_pct: 50,
             outcome: "winner",
             filing_portal: "https://disclosures-clerk.house.gov",
@@ -426,12 +604,7 @@ describe("CongressFollowerStrategy", () => {
     await sub.initialize(50_000);
 
     // Pre-record the signal to simulate it already being processed
-    await store.recordSignal(
-      theme.id,
-      "nancy-pelosi-NVDA-2026-09-10-buy",
-      "NVDA",
-      "buy",
-    );
+    await store.recordSignal(theme.id, "nancy-pelosi-NVDA-2026-09-10-buy", "NVDA", "buy");
 
     // Mock Bargo API returning the same trade
     vi.spyOn(globalThis, "fetch").mockResolvedValueOnce({
@@ -449,8 +622,8 @@ describe("CongressFollowerStrategy", () => {
             amount_range: "$1,001 - $15,000",
             transaction_date: "2026-09-10",
             disclosure_date: "2026-09-15",
-            est_price: 120.00,
-            recent_price: 180.00,
+            est_price: 120.0,
+            recent_price: 180.0,
             perf_pct: 50,
             outcome: "winner",
             filing_portal: "https://disclosures-clerk.house.gov",
@@ -527,7 +700,9 @@ describe("CongressFollowerStrategy — regression fixes", () => {
   }
 
   /** Mock a fresh Bargo purchase disclosure. */
-  function mockPurchase(opts: { ticker?: string; price?: number; txDate?: string; discDate?: string } = {}) {
+  function mockPurchase(
+    opts: { ticker?: string; price?: number; txDate?: string; discDate?: string } = {},
+  ) {
     const now = Date.now();
     const txDate = opts.txDate ?? new Date(now - 7 * 86400_000).toISOString().slice(0, 10);
     const discDate = opts.discDate ?? new Date(now - 1 * 86400_000).toISOString().slice(0, 10);
@@ -579,27 +754,48 @@ describe("CongressFollowerStrategy — regression fixes", () => {
     const payload = {
       trades: [
         {
-          member: "Nancy Pelosi", member_slug: "nancy-pelosi", chamber: "house", state: "CA",
-          ticker: "NVDA", asset: "NVIDIA", type: "purchase",
+          member: "Nancy Pelosi",
+          member_slug: "nancy-pelosi",
+          chamber: "house",
+          state: "CA",
+          ticker: "NVDA",
+          asset: "NVIDIA",
+          type: "purchase",
           amount_range: "$1,001 - $15,000",
           transaction_date: new Date(Date.now() - 7 * 86400_000).toISOString().slice(0, 10),
           disclosure_date: new Date(Date.now() - 1 * 86400_000).toISOString().slice(0, 10),
-          est_price: 100, recent_price: 100, perf_pct: 0, outcome: null,
+          est_price: 100,
+          recent_price: 100,
+          perf_pct: 0,
+          outcome: null,
           filing_portal: "https://disclosures-clerk.house.gov",
         },
         {
-          member: "Nancy Pelosi", member_slug: "nancy-pelosi", chamber: "house", state: "CA",
-          ticker: "MSFT", asset: "Microsoft", type: "purchase",
+          member: "Nancy Pelosi",
+          member_slug: "nancy-pelosi",
+          chamber: "house",
+          state: "CA",
+          ticker: "MSFT",
+          asset: "Microsoft",
+          type: "purchase",
           amount_range: "$1,001 - $15,000",
           transaction_date: new Date(Date.now() - 6 * 86400_000).toISOString().slice(0, 10),
           disclosure_date: new Date(Date.now() - 1 * 86400_000).toISOString().slice(0, 10),
-          est_price: 500, recent_price: 500, perf_pct: 0, outcome: null,
+          est_price: 500,
+          recent_price: 500,
+          perf_pct: 0,
+          outcome: null,
           filing_portal: "https://disclosures-clerk.house.gov",
         },
       ],
-      page: 0, limit: 100, count: 2,
+      page: 0,
+      limit: 100,
+      count: 2,
     };
-    vi.spyOn(globalThis, "fetch").mockResolvedValue({ ok: true, json: async () => payload } as Response);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue({
+      ok: true,
+      json: async () => payload,
+    } as Response);
 
     const config = await store.getById(theme.id);
     const r1 = await strategy.evaluate(ctx, config!);
@@ -639,12 +835,13 @@ describe("CongressFollowerStrategy — regression fixes", () => {
     // Transaction 40 days ago, disclosed 35 days ago — too old by both clocks.
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
-      json: async () => mockPurchase({
-        ticker: "AAPL",
-        price: 200,
-        txDate: new Date(Date.now() - 40 * 86400_000).toISOString().slice(0, 10),
-        discDate: new Date(Date.now() - 35 * 86400_000).toISOString().slice(0, 10),
-      }),
+      json: async () =>
+        mockPurchase({
+          ticker: "AAPL",
+          price: 200,
+          txDate: new Date(Date.now() - 40 * 86400_000).toISOString().slice(0, 10),
+          discDate: new Date(Date.now() - 35 * 86400_000).toISOString().slice(0, 10),
+        }),
     } as Response);
 
     const config = await store.getById(theme.id);
@@ -675,12 +872,13 @@ describe("CongressFollowerStrategy — regression fixes", () => {
     // market only learned of it at disclosure. (This is the Pelosi BE case.)
     vi.spyOn(globalThis, "fetch").mockResolvedValue({
       ok: true,
-      json: async () => mockPurchase({
-        ticker: "BE",
-        price: 120,
-        txDate: new Date(Date.now() - 45 * 86400_000).toISOString().slice(0, 10),
-        discDate: new Date(Date.now() - 1 * 86400_000).toISOString().slice(0, 10),
-      }),
+      json: async () =>
+        mockPurchase({
+          ticker: "BE",
+          price: 120,
+          txDate: new Date(Date.now() - 45 * 86400_000).toISOString().slice(0, 10),
+          discDate: new Date(Date.now() - 1 * 86400_000).toISOString().slice(0, 10),
+        }),
     } as Response);
 
     const config = await store.getById(theme.id);
@@ -727,19 +925,32 @@ describe("CongressFollowerStrategy — regression fixes", () => {
       json: async () => ({
         trades: [
           {
-            member: "Nancy Pelosi", member_slug: "nancy-pelosi", chamber: "house", state: "CA",
-            ticker: "NVDA", asset: "NVIDIA", type: "sale_full",
+            member: "Nancy Pelosi",
+            member_slug: "nancy-pelosi",
+            chamber: "house",
+            state: "CA",
+            ticker: "NVDA",
+            asset: "NVIDIA",
+            type: "sale_full",
             amount_range: "$15,001 - $50,000",
             transaction_date: new Date(Date.now() - 2 * 86400_000).toISOString().slice(0, 10),
             disclosure_date: new Date(Date.now() - 1 * 86400_000).toISOString().slice(0, 10),
-            est_price: 200, recent_price: 200, perf_pct: 0, outcome: null,
+            est_price: 200,
+            recent_price: 200,
+            perf_pct: 0,
+            outcome: null,
             filing_portal: "https://disclosures-clerk.house.gov",
           },
         ],
-        page: 0, limit: 100, count: 1,
+        page: 0,
+        limit: 100,
+        count: 1,
       }),
     } as Response);
 
+    // Cycles are ~1h apart in production (cache TTL 15 min); reset the
+    // module cache so this evaluate sees the freshly-mocked sale payload.
+    __resetBargoCache();
     const r2 = await strategy.evaluate(ctx, config!);
     expect(r2.trades).toHaveLength(1);
     const sell = r2.trades[0] as any;
@@ -763,7 +974,7 @@ describe("CongressFollowerStrategy — regression fixes", () => {
       schedule: { type: "manual" },
       params: { politician: "Pelosi" },
       allocatedCapital: 1_000,
-      maxAllocationPct: 90,       // single-position limit high enough to not mask the cash cap
+      maxAllocationPct: 90, // single-position limit high enough to not mask the cash cap
       maxTotalAllocationPct: 100, // total limit high enough to expose the cash cap
     });
 
@@ -775,7 +986,11 @@ describe("CongressFollowerStrategy — regression fixes", () => {
 
     // Pre-buy 8 INTC @ 120 = 960 → 40 cash left, equity 1000.
     await sub.placeOrder({
-      symbol: "INTC", side: "buy", quantity: 8, orderType: "limit", limitPrice: 120,
+      symbol: "INTC",
+      side: "buy",
+      quantity: 8,
+      orderType: "limit",
+      limitPrice: 120,
     } as any);
 
     // Fresh NVDA signal: 90% of equity would be 900/120 = 7.5 units, but only

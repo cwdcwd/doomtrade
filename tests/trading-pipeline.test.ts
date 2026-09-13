@@ -50,11 +50,28 @@ const mockMarketData = {
       "BTC/USDT": 50000,
       "ADA/USDT": 0.5,
     };
-    return { symbol, price: prices[symbol] ?? 100, bid: 100, ask: 100, timestamp: new Date().toISOString(), source: "mock" };
+    return {
+      symbol,
+      price: prices[symbol] ?? 100,
+      bid: 100,
+      ask: 100,
+      timestamp: new Date().toISOString(),
+      source: "mock",
+    };
   },
-  async getBars() { return []; },
+  async getBars() {
+    return [];
+  },
   async getSnapshot(symbols: string[]) {
-    return symbols.map((s) => ({ symbol: s, price: 100, change: 0, changePct: 0, volume: 0, timestamp: new Date().toISOString(), source: "mock" }));
+    return symbols.map((s) => ({
+      symbol: s,
+      price: 100,
+      change: 0,
+      changePct: 0,
+      volume: 0,
+      timestamp: new Date().toISOString(),
+      source: "mock",
+    }));
   },
 } as any;
 
@@ -206,5 +223,52 @@ describe("AgentTradingPipeline", () => {
     // smaCrossover requires slow + 1 closes; this is the strict minimum —
     // anything less means the indicator can never emit a signal.
     expect(days).toBeGreaterThanOrEqual(params.indicator.periods.slow + 1);
+  });
+
+  // fleet-ops-miz: the congress-follower params must carry the optional
+  // Bargo API key from pipeline config, or hourly crons starve on the
+  // 30 req/day anonymous quota.
+  it("congress-follower params carry bargoApiKey from pipeline config", async () => {
+    const seenConfigs: ThemeConfig[] = [];
+    class CapturingStrategy implements ThemeStrategy {
+      readonly type = "congress-follower";
+      async evaluate(_ctx: ThemeContext, config: ThemeConfig): Promise<ThemeEvaluationResult> {
+        seenConfigs.push(config);
+        return {
+          themeId: config.id,
+          timestamp: new Date().toISOString(),
+          signals: [],
+          decisions: [],
+          trades: [],
+          errors: [],
+        };
+      }
+    }
+
+    const strategies = new Map<string, ThemeStrategy>();
+    strategies.set("congress-follower", new CapturingStrategy());
+
+    const pipeline = new AgentTradingPipeline({
+      agentManager: manager,
+      marketData: mockMarketData,
+      db,
+      strategies,
+      defaultUniverse: ["ETH/USDT"],
+      bargoApiKey: "bargo-key-abc",
+    });
+
+    await manager.register("Kangbot", { startingBalance: 100, strategy: "congress-follower" });
+
+    await pipeline.runCycle();
+
+    expect(seenConfigs).toHaveLength(1);
+    const params = seenConfigs[0].params as {
+      apiKey?: string;
+      politician: string;
+      mirrorAction: string;
+    };
+    expect(params.politician).toBe("Pelosi");
+    expect(params.mirrorAction).toBe("all");
+    expect(params.apiKey).toBe("bargo-key-abc");
   });
 });

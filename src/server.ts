@@ -244,6 +244,7 @@ export async function buildServer(
     defaultUniverse: DEFAULT_UNIVERSE,
     a2aEndpoint: config.a2aEndpoint || undefined,
     a2aToken: config.a2aToken || undefined,
+    bargoApiKey: config.bargoApiKey || undefined,
   });
 
   // Agent trade engine — per-agent risk checks and execution
