@@ -40,6 +40,10 @@ const ConfigSchema = z.object({
   a2aEndpoint: z.string().default(""),
   a2aToken: z.string().default(""),
 
+  // Bargo Congress Trades API key (optional — anonymous tier is 30 req/day;
+  // a free key from https://www.bargo.ai/free-apis/dash raises the quota)
+  bargoApiKey: z.string().default(""),
+
   // Clerk management-dashboard auth. Empty/malformed secret key = dev-open
   // mode (management routes behave anonymous). sk_ stays server-side; the
   // publishable key pk_ is the only Clerk value ever sent to browsers.
@@ -80,6 +84,7 @@ export function loadConfig(env: Record<string, string | undefined> = process.env
     redisUrl: env.REDIS_URL,
     a2aEndpoint: env.A2A_ENDPOINT ?? "",
     a2aToken: env.A2A_TOKEN ?? env.LITELLM_GATEWAY_API_KEY ?? "",
+    bargoApiKey: env.BARGO_API_KEY ?? "",
     clerkSecretKey: env.CLERK_SECRET_KEY ?? "",
     clerkPublishableKey: env.CLERK_PUBLISHABLE_KEY ?? "",
     adminClerkUserId: env.ADMIN_CLERK_USER_ID ?? "",

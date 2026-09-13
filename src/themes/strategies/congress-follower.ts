@@ -28,7 +28,7 @@ import { randomUUID } from "node:crypto";
 import type { ThemeStrategy, ThemeContext } from "../strategy.js";
 import type { ThemeConfig, ThemeEvaluationResult, ThemeSignal } from "../theme.js";
 import type { OrderResult, Position } from "../../executor/executor.js";
-import { CongressTradesSignalSource } from "../sources/congress-trades.js";
+import { CongressTradesSignalSource, BargoRateLimitError } from "../sources/congress-trades.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
 import { ThemeStore } from "../theme-store.js";
 import { isWithinAllocationLimit } from "../allocation-check.js";
@@ -82,13 +82,20 @@ export class CongressFollowerStrategy implements ThemeStrategy {
     try {
       signals = await source.fetchSignals();
     } catch (err) {
+      // Quota exhaustion is expected operational state, not a code failure —
+      // surface a diagnosable message instead of a raw HTTP status.
+      const rateLimited = err instanceof BargoRateLimitError;
       return {
         themeId: config.id,
         timestamp,
         signals: [],
         decisions: [],
         trades: [],
-        errors: [`Failed to fetch signals: ${errorMessage(err)}`],
+        errors: [
+          rateLimited
+            ? `Bargo quota exhausted for today (resets UTC midnight) — no signals this cycle; ${errorMessage(err)}`
+            : `Failed to fetch signals: ${errorMessage(err)}`,
+        ],
       };
     }
 

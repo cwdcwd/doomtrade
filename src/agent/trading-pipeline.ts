@@ -41,6 +41,8 @@ export interface PipelineConfig {
   a2aEndpoint?: string;
   /** A2A bearer token */
   a2aToken?: string;
+  /** Bargo Congress Trades API key (optional; raises the anonymous 30/day quota) */
+  bargoApiKey?: string;
 }
 
 export interface AgentTradeResult {
@@ -236,6 +238,9 @@ export class AgentTradingPipeline {
           // Mirror sales too — a follower that only buys can never exit when
           // the politician sells. Sell mirroring sells the held quantity only.
           mirrorAction: "all",
+          // Optional Bargo API key (BARGO_API_KEY) — raises the anonymous
+          // 30 req/day quota that starved hourly congress cycles (fleet-ops-miz).
+          apiKey: this.config.bargoApiKey,
         };
       case "agent-driven":
         return {
