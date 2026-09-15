@@ -234,7 +234,12 @@ export class AgentTradingPipeline {
         };
       case "congress-follower":
         return {
-          politician: "Pelosi",
+          // Follow ALL members — the most active congressional traders
+          // naturally generate the most signals. Previously filtered to
+          // "Pelosi" only, which traded rarely and concentrated 99% of the
+          // portfolio in a single stock (BE). The Bargo API returns newest
+          // disclosures first, so active filers dominate each cycle.
+          politician: undefined,
           // Mirror sales too — a follower that only buys can never exit when
           // the politician sells. Sell mirroring sells the held quantity only.
           mirrorAction: "all",

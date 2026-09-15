@@ -360,7 +360,7 @@ describe("CongressFollowerStrategy", () => {
     };
   }
 
-  it("returns error when politician param is missing", async () => {
+  it("follows all members when politician param is omitted", async () => {
     const strategy = new CongressFollowerStrategy();
     const config: ThemeConfig = {
       id: "test-1",
@@ -376,9 +376,10 @@ describe("CongressFollowerStrategy", () => {
       allocatedCapital: 10_000,
     };
 
+    // With no politician, the strategy follows ALL members — it should
+    // proceed to fetch signals rather than returning a param error.
     const result = await strategy.evaluate(buildContext("test-1"), config);
-    expect(result.errors).toContain("Missing required param: politician");
-    expect(result.signals).toHaveLength(0);
+    expect(result.errors).not.toContain("Missing required param: politician");
   });
 
   it("returns error when sub-account is not initialized", async () => {

@@ -16,7 +16,10 @@
  * Strategy type: "congress-follower"
  *
  * Required params:
- * - politician: name of the politician to follow (partial match)
+ * - politician: name of the politician to follow (partial match).
+ *   When omitted, the strategy follows ALL members — the most active
+ *   traders naturally generate the most signals because the Bargo API
+ *   returns newest disclosures first.
  *
  * Optional params:
  * - mirrorAction: "buys-only" (default) or "all"
@@ -35,7 +38,8 @@ import { isWithinAllocationLimit } from "../allocation-check.js";
 import { errorMessage } from "../../util/error.js";
 
 interface CongressFollowerParams {
-  politician: string;
+  /** Politician to follow (partial match). Omit to follow ALL members. */
+  politician?: string;
   mirrorAction?: "buys-only" | "all";
   maxSignalAgeDays?: number;
   apiKey?: string;
@@ -55,27 +59,20 @@ export class CongressFollowerStrategy implements ThemeStrategy {
     const timestamp = new Date().toISOString();
     const errors: string[] = [];
 
-    if (!params.politician) {
-      return {
-        themeId: config.id,
-        timestamp,
-        signals: [],
-        decisions: [],
-        trades: [],
-        errors: ["Missing required param: politician"],
-      };
-    }
-
+    // politician is optional — when omitted, follow ALL members.
+    // The most active traders naturally dominate because the Bargo API
+    // returns newest disclosures first and active members file more often.
     const maxSignalAgeDays = params.maxSignalAgeDays ?? DEFAULT_MAX_SIGNAL_AGE_DAYS;
     const mirrorSells = params.mirrorAction === "all";
 
     // Fetch signals from Bargo API. Buys-only (default) filters at the API
     // level; mirroring sales fetches both and splits by action below.
+    // When no politician is specified, all members' trades are fetched.
     const source = new CongressTradesSignalSource({
-      member: params.politician,
+      member: params.politician || undefined,
       type: mirrorSells ? undefined : "purchase",
       apiKey: params.apiKey,
-      limit: 50,
+      limit: 100,
     });
 
     let signals: ThemeSignal[];

@@ -264,10 +264,11 @@ describe("AgentTradingPipeline", () => {
     expect(seenConfigs).toHaveLength(1);
     const params = seenConfigs[0].params as {
       apiKey?: string;
-      politician: string;
+      politician?: string;
       mirrorAction: string;
     };
-    expect(params.politician).toBe("Pelosi");
+    // politician is now undefined — strategy follows ALL members
+    expect(params.politician).toBeUndefined();
     expect(params.mirrorAction).toBe("all");
     expect(params.apiKey).toBe("bargo-key-abc");
   });
