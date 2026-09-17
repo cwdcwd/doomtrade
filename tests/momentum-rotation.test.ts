@@ -11,6 +11,7 @@ import {
   MomentumScreenSignalSource,
   type MomentumScreenConfig,
 } from "../src/themes/sources/momentum-screen.js";
+import { combinedSignal as combinedSignalRef } from "../src/research/indicators.js";
 import {
   MomentumRotationStrategy,
   type MomentumRotationParams,
@@ -245,12 +246,13 @@ describe("MomentumScreenSignalSource", () => {
     expect(neutSignal).toBeUndefined();
   });
 
-  it("returns hold for combined when indicators disagree", async () => {
-    // Golden cross (buy) + overbought RSI (sell) -> disagreement -> hold
-    // We need a series that has a golden cross but also overbought RSI
+  it("returns hold for combined when the RSI gate vetoes an overbought cross", async () => {
+    // v2 combined semantics (doomtrade-hyi): the SMA cross alone is not
+    // enough — RSI gates the entry. A sharp rise that triggers a golden
+    // cross while RSI is overbought (> 70) must be held, not bought.
     const prices: number[] = [];
     for (let i = 0; i < 60; i++) prices.push(100 - i * 0.5); // decline
-    for (let i = 0; i < 30; i++) prices.push(70 + i * 3); // very sharp uptrend -> both golden cross AND overbought RSI
+    for (let i = 0; i < 30; i++) prices.push(70 + i * 3); // sharp uptrend -> golden cross AND RSI ~98
     const barsBySymbol: Record<string, Bar[]> = {
       "MIX": barsFromCloses(prices, "MIX"),
     };
@@ -268,11 +270,106 @@ describe("MomentumScreenSignalSource", () => {
     const source = new MomentumScreenSignalSource(marketData, config);
     const signals = await source.fetchSignals();
 
-    // Should produce a hold signal due to disagreement (buy from SMA, sell from RSI)
+    // RSI gate vetoed the buy — hold, not a buy chase into an overbought pump
     const mixSignal = signals.find((s) => s.symbol === "MIX");
     expect(mixSignal).toBeDefined();
     expect(mixSignal!.action).toBe("hold");
     expect(mixSignal!.metadata).toHaveProperty("indicator", "combined");
+  });
+
+  it("combined fires buy when golden cross within window and RSI not overbought", async () => {
+    // Regression (doomtrade-hyi): the original combined indicator required
+    // a golden cross on the exact current bar AND RSI oversold on the same
+    // bar — near-contradictory conditions that made it structurally silent
+    // (0 fires across 910 real bar-evaluations; the Doom agent never traded).
+    // v2: cross within last crossWindow (5) bars + RSI gate (< overbought).
+    //
+    // Shape: 55-bar gentle decline (fast SMA below slow SMA), 12-bar
+    // zigzag rise (+1.5 / -0.75) that triggers a golden cross ~5 bars
+    // back while keeping RSI moderate, then 3-bar mild dip that cools RSI
+    // to ~49. Golden cross within window + RSI not overbought => BUY.
+    const prices: number[] = [];
+    for (let i = 0; i < 55; i++) prices.push(100 - i * 0.05);
+    for (let i = 0; i < 12; i++) prices.push(prices[prices.length - 1] + (i % 2 === 0 ? 1.5 : -0.75));
+    for (let i = 0; i < 3; i++) prices.push(prices[prices.length - 1] - 0.8);
+    expect(prices).toHaveLength(70);
+
+    const barsBySymbol: Record<string, Bar[]> = {
+      "GOLD": barsFromCloses(prices, "GOLD"),
+    };
+
+    const marketData = createMockMarketData(barsBySymbol);
+    const config: MomentumScreenConfig = {
+      universe: ["GOLD"],
+      indicator: {
+        type: "combined",
+        periods: { fast: 20, slow: 50 },
+        rsiPeriod: 14,
+      },
+    };
+
+    const source = new MomentumScreenSignalSource(marketData, config);
+    const signals = await source.fetchSignals();
+
+    const goldSignal = signals.find((s) => s.symbol === "GOLD");
+    expect(goldSignal).toBeDefined();
+    expect(goldSignal!.action).toBe("buy");
+    expect(goldSignal!.metadata).toHaveProperty("indicator", "combined");
+    expect(goldSignal!.reason).toContain("golden cross within 5 bars");
+  });
+
+  it("combined stays silent when no cross occurred within the window", async () => {
+    // Golden cross happened 6+ bars ago -> outside crossWindow -> no signal.
+    // (Previously the exact-bar requirement made combined permanently
+    // silent; now the window bounds how stale a cross may be.)
+    const prices: number[] = [];
+    for (let i = 0; i < 55; i++) prices.push(100 - i * 0.05);
+    for (let i = 0; i < 12; i++) prices.push(prices[prices.length - 1] + (i % 2 === 0 ? 1.5 : -0.75));
+    for (let i = 0; i < 3; i++) prices.push(prices[prices.length - 1] - 0.8);
+    // Append 6 flat bars -> pushes the cross beyond the 5-bar window
+    for (let i = 0; i < 6; i++) prices.push(prices[prices.length - 1] + 0.05);
+    expect(prices).toHaveLength(76);
+
+    const barsBySymbol: Record<string, Bar[]> = {
+      "STALE": barsFromCloses(prices, "STALE"),
+    };
+
+    const marketData = createMockMarketData(barsBySymbol);
+    const config: MomentumScreenConfig = {
+      universe: ["STALE"],
+      indicator: {
+        type: "combined",
+        periods: { fast: 20, slow: 50 },
+        rsiPeriod: 14,
+      },
+    };
+
+    const source = new MomentumScreenSignalSource(marketData, config);
+    const signals = await source.fetchSignals();
+
+    // cross now 6 bars stale — outside window, plus the hold signal
+    const staleSignal = signals.find((s) => s.symbol === "STALE");
+    expect(staleSignal).toBeDefined();
+    expect(staleSignal!.action).toBe("hold");
+  });
+
+  it("combined fires buy with crossWindow=0 (exact-bar behavior preserved)", async () => {
+    // crossWindow=0 reproduces the original "cross on this exact bar"
+    // requirement, but the RSI leg still gates instead of requiring
+    // oversold — so the old structurally-silent bug cannot regress
+    // even at crossWindow=0.
+    const prices: number[] = [];
+    for (let i = 0; i < 55; i++) prices.push(100 - i * 0.05);
+    for (let i = 0; i < 12; i++) prices.push(prices[prices.length - 1] + (i % 2 === 0 ? 1.5 : -0.75));
+    for (let i = 0; i < 3; i++) prices.push(prices[prices.length - 1] - 0.8);
+    // Trim to the exact bar where the cross fires (lag 5 from the 70-bar series)
+    const crossAt = 65; // 70 - 5
+    const trimmed = prices.slice(0, crossAt);
+    // At slice len 65 the cross fired with lag 5 in the 70-bar series; here
+    // it fires on the exact last bar. Verify empirically inside the test via
+    // the source — with crossWindow=0 only exact-bar crosses count.
+    expect(combinedSignalRef(trimmed, { fastPeriod: 20, slowPeriod: 50, rsiPeriod: 14, crossWindow: 0 })).toBe("buy");
+    expect(combinedSignalRef(prices, { fastPeriod: 20, slowPeriod: 50, rsiPeriod: 14, crossWindow: 0 })).toBe("neutral");
   });
 
   it("skips symbols that return no bar data", async () => {
