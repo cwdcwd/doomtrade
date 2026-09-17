@@ -238,3 +238,96 @@ export function rsiSignal(
   if (rsiVal > overbought) return "sell";
   return "neutral";
 }
+
+// ── Combined: SMA crossover (windowed) + RSI gate ───────────────
+
+export interface CombinedSignalParams {
+  /** SMA fast period (e.g. 20). */
+  fastPeriod: number;
+  /** SMA slow period (e.g. 50). */
+  slowPeriod: number;
+  /** RSI period (conventionally 14). */
+  rsiPeriod: number;
+  /**
+   * How many recent bars to search for the crossover (default 5).
+   * The cross must have occurred within this window of the latest bar —
+   * not necessarily on the exact latest bar.
+   */
+  crossWindow?: number;
+  /** RSI level above which the buy leg is vetoed (default 70). */
+  overbought?: number;
+  /** RSI level below which the sell leg is vetoed (default 30). */
+  oversold?: number;
+}
+
+/**
+ * Combined momentum signal: SMA crossover within the last `crossWindow`
+ * bars, gated by RSI.
+ *
+ * v2 semantics (doomtrade-hyi): the original combined indicator required
+ * the crossover to fire on the exact current bar AND RSI to sit at an
+ * extreme (oversold/overbought) on that same bar. Those conditions are
+ * near-contradictory — a golden cross follows a ~50-bar sustained rise
+ * that pushes RSI well above 30 — so it was structurally silent: 0 fires
+ * across 910 real bar-evaluations (6m daily × 7 symbols), leaving the
+ * Doom agent at 0 signals since creation.
+ *
+ * New semantics — RSI gates instead of concurring:
+ * - "buy"  when a golden cross occurred within the last `crossWindow`
+ *          bars AND current RSI is NOT overbought (RSI < overbought).
+ * - "sell" when a death cross occurred within the last `crossWindow`
+ *          bars AND current RSI is NOT oversold (RSI > oversold).
+ * - "neutral" otherwise.
+ *
+ * This keeps RSI's veto role (don't chase an overbought pump, don't
+ * sell into an oversold capitulation) while letting the trend signal
+ * drive entries, as it always should have.
+ */
+export function combinedSignal(values: number[], params: CombinedSignalParams): Signal {
+  const {
+    fastPeriod,
+    slowPeriod,
+    rsiPeriod,
+    crossWindow = 5,
+    overbought = 70,
+    oversold = 30,
+  } = params;
+
+  // Need enough data for the slow SMA (plus one prior bar for the
+  // crossover comparison) and for RSI.
+  if (values.length < slowPeriod + 1 || values.length < rsiPeriod + 1) {
+    return "neutral";
+  }
+
+  // ── Crossover leg: search back through the cross window ──
+  let cross: "buy" | "sell" | null = null;
+  let barsSinceCross: number | null = null;
+
+  // Latest bar first (barsSinceCross = 0), then walk backwards.
+  const maxLookback = Math.min(crossWindow, values.length - slowPeriod - 1);
+  for (let lag = 0; lag <= maxLookback; lag++) {
+    const upTo = values.length - lag; // slice end (exclusive)
+    const slice = upTo === values.length ? values : values.slice(0, upTo);
+    const sig = smaCrossover(slice, fastPeriod, slowPeriod);
+    if (sig === "buy" || sig === "sell") {
+      cross = sig;
+      barsSinceCross = lag;
+      break;
+    }
+  }
+
+  if (cross === null) return "neutral";
+
+  // ── RSI gate leg: current RSI must not contradict the cross ──
+  const rsiVal = rsi(values, rsiPeriod);
+  if (rsiVal === null) return "neutral";
+
+  if (cross === "buy" && rsiVal < overbought) {
+    return "buy";
+  }
+  if (cross === "sell" && rsiVal > oversold) {
+    return "sell";
+  }
+
+  return "neutral";
+}

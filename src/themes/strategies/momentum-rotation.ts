@@ -22,7 +22,7 @@ import { randomUUID } from "node:crypto";
 import type { ThemeStrategy, ThemeContext } from "../strategy.js";
 import type { ThemeConfig, ThemeEvaluationResult, ThemeSignal } from "../theme.js";
 import type { MarketDataService, Bar, Timeframe } from "../../market/market.js";
-import { smaCrossover, rsiSignal, type Signal } from "../../research/indicators.js";
+import { smaCrossover, rsiSignal, combinedSignal, type Signal } from "../../research/indicators.js";
 import { ThemeSubAccount } from "../theme-sub-account.js";
 import { ThemeStore } from "../theme-store.js";
 import { isWithinAllocationLimit } from "../allocation-check.js";
@@ -48,6 +48,13 @@ export interface CombinedConfig {
   type: "combined";
   periods: { fast: number; slow: number };
   rsiPeriod: number;
+  /**
+   * How many recent bars to search for the SMA crossover (default 5).
+   * v2 (doomtrade-hyi): the cross may have occurred anywhere within this
+   * window — not only on the exact latest bar. RSI acts as a gate, not a
+   * second concurrent requirement.
+   */
+  crossWindow?: number;
   oversold?: number;
   overbought?: number;
 }
@@ -328,27 +335,27 @@ export class MomentumRotationStrategy implements ThemeStrategy {
           reason = `RSI(${indicator.period}) ${sig === "buy" ? "oversold" : "overbought"}`;
           metadata = { indicator: "rsi", signal: sig };
         } else {
-          // combined
+          // combined — v2 (doomtrade-hyi): cross within window + RSI gate
           const { fast, slow } = indicator.periods;
-          const smaSig = smaCrossover(closes, fast, slow);
-          const rsiSig = rsiSignal(
-            closes,
-            indicator.rsiPeriod,
-            indicator.oversold ?? 30,
-            indicator.overbought ?? 70,
-          );
-
-          if (smaSig === "buy" && rsiSig === "buy") {
-            action = "buy";
-            reason = `Combined: SMA golden cross + RSI oversold`;
-          } else if (smaSig === "sell" && rsiSig === "sell") {
-            action = "sell";
-            reason = `Combined: SMA death cross + RSI overbought`;
-          } else {
-            // Disagreement — hold, not actionable for rotation
-            continue;
-          }
-          metadata = { indicator: "combined", smaSignal: smaSig, rsiSignal: rsiSig };
+          const sig = combinedSignal(closes, {
+            fastPeriod: fast,
+            slowPeriod: slow,
+            rsiPeriod: indicator.rsiPeriod,
+            crossWindow: indicator.crossWindow ?? 5,
+            overbought: indicator.overbought ?? 70,
+            oversold: indicator.oversold ?? 30,
+          });
+          if (sig === "neutral") continue; // not actionable for rotation
+          action = sig;
+          reason =
+            sig === "buy"
+              ? `Combined: SMA(${fast}/${slow}) golden cross within ${indicator.crossWindow ?? 5} bars + RSI(${indicator.rsiPeriod}) not overbought`
+              : `Combined: SMA(${fast}/${slow}) death cross within ${indicator.crossWindow ?? 5} bars + RSI(${indicator.rsiPeriod}) not oversold`;
+          metadata = {
+            indicator: "combined",
+            combinedSignal: sig,
+            crossWindow: indicator.crossWindow ?? 5,
+          };
         }
 
         signals.push({

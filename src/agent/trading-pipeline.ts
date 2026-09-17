@@ -222,7 +222,17 @@ export class AgentTradingPipeline {
       case "momentum-rotation":
         return {
           universe: this.config.defaultUniverse,
-          indicator: { type: "combined", periods: { fast: 20, slow: 50 }, rsiPeriod: 14 },
+          // v2 combined (doomtrade-hyi): cross within last `crossWindow`
+          // bars + RSI gate. The original same-bar concurrent requirement
+          // (golden cross on THIS bar AND RSI oversold on THIS bar) is
+          // structurally silent - a golden cross follows a sustained rise
+          // that pushes RSI well above 30. 910 real bar-evaluations, 0 fires.
+          indicator: {
+            type: "combined",
+            periods: { fast: 20, slow: 50 },
+            rsiPeriod: 14,
+            crossWindow: 5,
+          },
           topN: 3,
           timeframe: "1Day",
           // "6m" (~180 daily bars), not "1m" (~30): smaCrossover needs

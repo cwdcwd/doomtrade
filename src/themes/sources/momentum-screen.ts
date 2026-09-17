@@ -21,7 +21,7 @@
 import type { SignalSource } from "../signal-source.js";
 import type { ThemeSignal } from "../theme.js";
 import type { MarketDataService, Bar, Timeframe } from "../../market/market.js";
-import { smaCrossover, rsiSignal, type Signal } from "../../research/indicators.js";
+import { smaCrossover, rsiSignal, combinedSignal, type Signal } from "../../research/indicators.js";
 
 // ── Config types ───────────────────────────────────────────────
 
@@ -49,6 +49,13 @@ export interface CombinedConfig {
   type: "combined";
   periods: { fast: number; slow: number };
   rsiPeriod: number;
+  /**
+   * How many recent bars to search for the SMA crossover (default 5).
+   * v2 (doomtrade-hyi): the cross may have occurred anywhere within this
+   * window — not only on the exact latest bar. RSI acts as a gate, not a
+   * second concurrent requirement.
+   */
+  crossWindow?: number;
   oversold?: number;
   overbought?: number;
 }
@@ -139,25 +146,31 @@ export class MomentumScreenSignalSource implements SignalSource {
       return this.toThemeSignal(symbol, sig, closes, "rsi", `RSI(${period})`);
     }
 
-    // combined
+    // combined — v2 (doomtrade-hyi): cross within window + RSI gate
     const { fast, slow } = ind.periods;
-    const smaSig = smaCrossover(closes, fast, slow);
-    const rsiSig = rsiSignal(closes, ind.rsiPeriod, ind.oversold ?? 30, ind.overbought ?? 70);
+    const sig = combinedSignal(closes, {
+      fastPeriod: fast,
+      slowPeriod: slow,
+      rsiPeriod: ind.rsiPeriod,
+      crossWindow: ind.crossWindow ?? 5,
+      overbought: ind.overbought ?? 70,
+      oversold: ind.oversold ?? 30,
+    });
 
     let action: "buy" | "sell" | "hold";
     let reason: string;
 
-    if (smaSig === "buy" && rsiSig === "buy") {
-      action = "buy";
-      reason = `Combined: SMA(${fast}/${slow}) golden cross + RSI(${ind.rsiPeriod}) oversold`;
-    } else if (smaSig === "sell" && rsiSig === "sell") {
-      action = "sell";
-      reason = `Combined: SMA(${fast}/${slow}) death cross + RSI(${ind.rsiPeriod}) overbought`;
+    if (sig === "buy" || sig === "sell") {
+      action = sig;
+      reason =
+        sig === "buy"
+          ? `Combined: SMA(${fast}/${slow}) golden cross within ${ind.crossWindow ?? 5} bars + RSI(${ind.rsiPeriod}) not overbought`
+          : `Combined: SMA(${fast}/${slow}) death cross within ${ind.crossWindow ?? 5} bars + RSI(${ind.rsiPeriod}) not oversold`;
     } else {
-      // For combined mode, emit a hold signal when indicators disagree
-      // so the strategy has full visibility
+      // No actionable combined signal — emit hold so the strategy has
+      // full visibility (previous versions emitted hold on disagreement)
       action = "hold";
-      reason = `Combined: SMA=${smaSig}, RSI=${rsiSig} (disagreement)`;
+      reason = `Combined: no cross within ${ind.crossWindow ?? 5}-bar window or RSI gate vetoed`;
     }
 
     const lastPrice = closes[closes.length - 1];
@@ -169,8 +182,8 @@ export class MomentumScreenSignalSource implements SignalSource {
       reason,
       metadata: {
         indicator: "combined",
-        smaSignal: smaSig,
-        rsiSignal: rsiSig,
+        combinedSignal: sig,
+        crossWindow: ind.crossWindow ?? 5,
         fastPeriod: fast,
         slowPeriod: slow,
         rsiPeriod: ind.rsiPeriod,
