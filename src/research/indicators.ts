@@ -283,10 +283,7 @@ export interface CombinedSignalParams {
  * sell into an oversold capitulation) while letting the trend signal
  * drive entries, as it always should have.
  */
-export function combinedSignal(
-  values: number[],
-  params: CombinedSignalParams,
-): Signal {
+export function combinedSignal(values: number[], params: CombinedSignalParams): Signal {
   const {
     fastPeriod,
     slowPeriod,
