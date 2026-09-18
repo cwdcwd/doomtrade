@@ -1,0 +1,2 @@
+okz branch-protection behavioral test marker 20260918-1451
+PR must never merge; zero-approval merge attempt must be rejected.
