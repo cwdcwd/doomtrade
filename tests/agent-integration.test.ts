@@ -12,10 +12,12 @@ const mockNotify = vi.fn().mockResolvedValue(undefined);
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("@cwdcwd/agent-bridge", () => ({
-  A2AClient: vi.fn().mockImplementation(() => ({
-    notify: mockNotify,
-    sendMessage: mockSendMessage,
-  })),
+  A2AClient: vi.fn().mockImplementation(function () {
+    return {
+      notify: mockNotify,
+      sendMessage: mockSendMessage,
+    };
+  }),
 }));
 
 // ── Helpers ─────────────────────────────────────────────────────
@@ -41,16 +43,11 @@ async function createCoordinator() {
     initialCapital: 100_000,
   });
 
-  const coordinator = new AgentCoordinator(
-    decisionStore,
-    tradeEngine,
-    portfolio,
-    {
-      peerEndpoint: "https://ai.lan/v1/agents/test-agent",
-      peerToken: "test-token",
-      selfName: "doom",
-    },
-  );
+  const coordinator = new AgentCoordinator(decisionStore, tradeEngine, portfolio, {
+    peerEndpoint: "https://ai.lan/v1/agents/test-agent",
+    peerToken: "test-token",
+    selfName: "doom",
+  });
 
   return { coordinator, decisionStore, tradeEngine, portfolio, executor, db };
 }
@@ -177,9 +174,9 @@ describe("AgentCoordinator", () => {
     it("should throw for a non-existent decision", async () => {
       const { coordinator } = await createCoordinator();
 
-      await expect(
-        coordinator.executeDecision("nonexistent-id"),
-      ).rejects.toThrow("Decision not found: nonexistent-id");
+      await expect(coordinator.executeDecision("nonexistent-id")).rejects.toThrow(
+        "Decision not found: nonexistent-id",
+      );
     });
 
     it("should notify peer when risk checks block a trade", async () => {
@@ -263,10 +260,7 @@ describe("AgentCoordinator", () => {
 
       await coordinator.sendMessage("Hey Kangbot, check AAPL earnings");
 
-      expect(mockSendMessage).toHaveBeenCalledWith(
-        "Hey Kangbot, check AAPL earnings",
-        "doom",
-      );
+      expect(mockSendMessage).toHaveBeenCalledWith("Hey Kangbot, check AAPL earnings", "doom");
     });
   });
 });

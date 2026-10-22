@@ -1,13 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Database } from "../src/db/database.js";
-import {
-  openDatabase,
-  closeDatabase,
-  execAll,
-} from "../src/db/database.js";
-import {
-  SimulatedExchange,
-} from "../src/executor/simulated.js";
+import { openDatabase, closeDatabase, execAll } from "../src/db/database.js";
+import { SimulatedExchange } from "../src/executor/simulated.js";
 import type { Executor, Position, Balance } from "../src/executor/executor.js";
 import { Portfolio } from "../src/portfolio/portfolio.js";
 import {
@@ -153,7 +147,14 @@ describe("positions helpers", () => {
 
     it("should use pre-computed unrealizedPnl if present", async () => {
       const positions: PortfolioPosition[] = [
-        { symbol: "AAPL", quantity: 100, avgEntryPrice: 150, side: "long", currentPrice: 175, unrealizedPnl: 999 },
+        {
+          symbol: "AAPL",
+          quantity: 100,
+          avgEntryPrice: 150,
+          side: "long",
+          currentPrice: 175,
+          unrealizedPnl: 999,
+        },
       ];
       expect(aggregateUnrealizedPnl(positions)).toBe(999);
     });
@@ -167,7 +168,13 @@ describe("positions helpers", () => {
     it("should sum market values across positions", async () => {
       const positions: PortfolioPosition[] = [
         { symbol: "AAPL", quantity: 100, avgEntryPrice: 150, side: "long", currentPrice: 185 },
-        { symbol: "BTC/USDT", quantity: 1, avgEntryPrice: 60_000, side: "long", currentPrice: 65_000 },
+        {
+          symbol: "BTC/USDT",
+          quantity: 1,
+          avgEntryPrice: 60_000,
+          side: "long",
+          currentPrice: 65_000,
+        },
       ];
       expect(aggregateMarketValue(positions)).toBe(83_500); // 18500 + 65000
     });
@@ -213,8 +220,22 @@ describe("Portfolio", () => {
 
     it("should return correct snapshot with positions", async () => {
       mockExecutor.setPositions([
-        { symbol: "AAPL", quantity: 100, avgEntryPrice: 150, side: "long", unrealizedPnl: 2500, marketValue: 18_500 },
-        { symbol: "MSFT", quantity: 50, avgEntryPrice: 400, side: "long", unrealizedPnl: -1000, marketValue: 21_000 },
+        {
+          symbol: "AAPL",
+          quantity: 100,
+          avgEntryPrice: 150,
+          side: "long",
+          unrealizedPnl: 2500,
+          marketValue: 18_500,
+        },
+        {
+          symbol: "MSFT",
+          quantity: 50,
+          avgEntryPrice: 400,
+          side: "long",
+          unrealizedPnl: -1000,
+          marketValue: 21_000,
+        },
       ]);
       mockExecutor.setBalance({
         cash: 50_000,
@@ -228,7 +249,7 @@ describe("Portfolio", () => {
       expect(snapshot.equity).toBe(89_500);
       expect(snapshot.positionsValue).toBe(39_500); // 18_500 + 21_000
       expect(snapshot.positions).toHaveLength(2);
-      expect(snapshot.exposurePct).toBeCloseTo(39_500 / 89_500 * 100, 2);
+      expect(snapshot.exposurePct).toBeCloseTo((39_500 / 89_500) * 100, 2);
       expect(snapshot.positionCount).toBe(2);
     });
 

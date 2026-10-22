@@ -11,12 +11,14 @@ const mockGetStockTradesFor = vi.fn();
 const mockGetStockBarsFor = vi.fn();
 
 vi.mock("@alpacahq/alpaca-trade-api", () => {
-  const Alpaca = vi.fn().mockImplementation(() => ({
-    marketData: {
-      getStockTradesFor: (...args: unknown[]) => mockGetStockTradesFor(...args),
-      getStockBarsFor: (...args: unknown[]) => mockGetStockBarsFor(...args),
-    },
-  }));
+  const Alpaca = vi.fn().mockImplementation(function () {
+    return {
+      marketData: {
+        getStockTradesFor: (...args: unknown[]) => mockGetStockTradesFor(...args),
+        getStockBarsFor: (...args: unknown[]) => mockGetStockBarsFor(...args),
+      },
+    };
+  });
   return {
     Alpaca,
     timeFrame: (n: number, unit: unknown) => ({ value: n, unit }),

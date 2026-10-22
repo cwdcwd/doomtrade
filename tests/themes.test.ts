@@ -197,7 +197,7 @@ describe("ThemeSubAccount", () => {
     const themeId = crypto.randomUUID();
     const sub = new ThemeSubAccount(db, themeId, {
       feeRate: 0,
-      getCurrentPrice: (sym) => sym === "AAPL" ? 150 : null,
+      getCurrentPrice: (sym) => (sym === "AAPL" ? 150 : null),
     });
     await sub.initialize(100_000);
 
@@ -311,11 +311,13 @@ describe("ThemeRunner", () => {
       return {
         themeId: config.id,
         timestamp: new Date().toISOString(),
-        signals: [{
-          symbol: "AAPL",
-          action: "buy",
-          reason: "test signal",
-        }],
+        signals: [
+          {
+            symbol: "AAPL",
+            action: "buy",
+            reason: "test signal",
+          },
+        ],
         decisions: [],
         trades: [],
         errors: [],
@@ -333,7 +335,12 @@ describe("ThemeRunner", () => {
 
     // Create a minimal ThemeRunner without full service deps
     const runner = new ThemeRunner(db, {
-      decisionStore: { create: () => {}, getById: () => null, list: () => [], count: () => 0 } as any,
+      decisionStore: {
+        create: () => {},
+        getById: () => null,
+        list: () => [],
+        count: () => 0,
+      } as any,
       tradeEngine: { executeDecision: () => ({}) } as any,
       portfolio: { getSnapshot: () => ({}), getPnL: () => ({}), getPositions: () => [] } as any,
       marketData: { getQuote: () => ({ price: 100 }) } as any,
@@ -418,15 +425,39 @@ describe("ThemeRunner", () => {
     await sub.initialize(100_000);
 
     // Buy at 100, sell at 120 — winning trade
-    await sub.placeOrder({ symbol: "WIN", side: "buy", quantity: 10, orderType: "market", clientOrderId: "w1" });
+    await sub.placeOrder({
+      symbol: "WIN",
+      side: "buy",
+      quantity: 10,
+      orderType: "market",
+      clientOrderId: "w1",
+    });
     currentPrice = 120;
-    await sub.placeOrder({ symbol: "WIN", side: "sell", quantity: 10, orderType: "market", clientOrderId: "w2" });
+    await sub.placeOrder({
+      symbol: "WIN",
+      side: "sell",
+      quantity: 10,
+      orderType: "market",
+      clientOrderId: "w2",
+    });
 
     // Buy at 100, sell at 80 — losing trade
     currentPrice = 100;
-    await sub.placeOrder({ symbol: "LOSE", side: "buy", quantity: 10, orderType: "market", clientOrderId: "l1" });
+    await sub.placeOrder({
+      symbol: "LOSE",
+      side: "buy",
+      quantity: 10,
+      orderType: "market",
+      clientOrderId: "l1",
+    });
     currentPrice = 80;
-    await sub.placeOrder({ symbol: "LOSE", side: "sell", quantity: 10, orderType: "market", clientOrderId: "l2" });
+    await sub.placeOrder({
+      symbol: "LOSE",
+      side: "sell",
+      quantity: 10,
+      orderType: "market",
+      clientOrderId: "l2",
+    });
 
     const runner = new ThemeRunner(db, {
       decisionStore: {} as any,
@@ -459,7 +490,13 @@ describe("ThemeRunner", () => {
     await sub.initialize(50_000);
 
     // Only buy — no sells, so no closed trades
-    await sub.placeOrder({ symbol: "AAPL", side: "buy", quantity: 10, orderType: "market", clientOrderId: "b1" });
+    await sub.placeOrder({
+      symbol: "AAPL",
+      side: "buy",
+      quantity: 10,
+      orderType: "market",
+      clientOrderId: "b1",
+    });
 
     const runner = new ThemeRunner(db, {
       decisionStore: {} as any,

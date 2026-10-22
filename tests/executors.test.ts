@@ -1,10 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import type {
-  Balance,
-  OrderRequest,
-  OrderResult,
-  Position,
-} from "../src/executor/executor.js";
+import type { Balance, OrderRequest, OrderResult, Position } from "../src/executor/executor.js";
 
 // ── Mock infrastructure ────────────────────────────────────────
 // We mock the dynamic import of the SDK packages so that no real
@@ -18,12 +13,14 @@ const alpacaCancelOrder = vi.fn();
 const alpacaGetPositions = vi.fn();
 const alpacaGetAccount = vi.fn();
 
-const AlpacaMock = vi.fn().mockImplementation(() => ({
-  submitOrder: alpacaSubmitOrder,
-  cancelOrder: alpacaCancelOrder,
-  getPositions: alpacaGetPositions,
-  getAccount: alpacaGetAccount,
-}));
+const AlpacaMock = vi.fn().mockImplementation(function () {
+  return {
+    submitOrder: alpacaSubmitOrder,
+    cancelOrder: alpacaCancelOrder,
+    getPositions: alpacaGetPositions,
+    getAccount: alpacaGetAccount,
+  };
+});
 
 vi.mock("@alpacahq/alpaca-trade-api", () => ({
   Alpaca: AlpacaMock,
@@ -35,14 +32,16 @@ const ccxtCancelOrder = vi.fn();
 const ccxtFetchPositions = vi.fn();
 const ccxtFetchBalance = vi.fn();
 
-const BinanceMock = vi.fn().mockImplementation(() => ({
-  apiKey: "",
-  secret: "",
-  createOrder: ccxtCreateOrder,
-  cancelOrder: ccxtCancelOrder,
-  fetchPositions: ccxtFetchPositions,
-  fetchBalance: ccxtFetchBalance,
-}));
+const BinanceMock = vi.fn().mockImplementation(function () {
+  return {
+    apiKey: "",
+    secret: "",
+    createOrder: ccxtCreateOrder,
+    cancelOrder: ccxtCancelOrder,
+    fetchPositions: ccxtFetchPositions,
+    fetchBalance: ccxtFetchBalance,
+  };
+});
 
 vi.mock("ccxt", () => ({
   binance: BinanceMock,
@@ -62,7 +61,9 @@ async function importCCXT() {
 
 // ── Helpers ────────────────────────────────────────────────────
 
-function alpacaOrderResp(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+function alpacaOrderResp(
+  overrides: Partial<Record<string, unknown>> = {},
+): Record<string, unknown> {
   return {
     id: "alpaca-order-1",
     client_order_id: "client-1",
@@ -77,7 +78,9 @@ function alpacaOrderResp(overrides: Partial<Record<string, unknown>> = {}): Reco
   };
 }
 
-function alpacaPositionResp(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+function alpacaPositionResp(
+  overrides: Partial<Record<string, unknown>> = {},
+): Record<string, unknown> {
   return {
     symbol: "AAPL",
     qty: "10",
@@ -89,7 +92,9 @@ function alpacaPositionResp(overrides: Partial<Record<string, unknown>> = {}): R
   };
 }
 
-function alpacaAccountResp(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+function alpacaAccountResp(
+  overrides: Partial<Record<string, unknown>> = {},
+): Record<string, unknown> {
   return {
     id: "acct-1",
     cash: "50000.00",
@@ -116,7 +121,9 @@ function ccxtOrderResp(overrides: Partial<Record<string, unknown>> = {}): Record
   };
 }
 
-function ccxtPositionResp(overrides: Partial<Record<string, unknown>> = {}): Record<string, unknown> {
+function ccxtPositionResp(
+  overrides: Partial<Record<string, unknown>> = {},
+): Record<string, unknown> {
   return {
     symbol: "BTC/USDT",
     contracts: 0.5,
@@ -425,9 +432,7 @@ describe("AlpacaExecutor", () => {
       // Trigger client creation.
       await executor.getBalance();
 
-      expect(AlpacaMock).toHaveBeenCalledWith(
-        expect.objectContaining({ paper: true }),
-      );
+      expect(AlpacaMock).toHaveBeenCalledWith(expect.objectContaining({ paper: true }));
     });
 
     it("should pass paper=false for live mode", async () => {
@@ -439,9 +444,7 @@ describe("AlpacaExecutor", () => {
       alpacaGetAccount.mockResolvedValue(alpacaAccountResp());
       await liveExecutor.getBalance();
 
-      expect(AlpacaMock).toHaveBeenCalledWith(
-        expect.objectContaining({ paper: false }),
-      );
+      expect(AlpacaMock).toHaveBeenCalledWith(expect.objectContaining({ paper: false }));
     });
   });
 });
@@ -521,14 +524,9 @@ describe("CCXTExecutor", () => {
         clientOrderId: "client-1",
       });
 
-      expect(ccxtCreateOrder).toHaveBeenCalledWith(
-        "BTC/USDT",
-        "market",
-        "buy",
-        0.5,
-        undefined,
-        { clientOrderId: "client-1" },
-      );
+      expect(ccxtCreateOrder).toHaveBeenCalledWith("BTC/USDT", "market", "buy", 0.5, undefined, {
+        clientOrderId: "client-1",
+      });
       expect(result.id).toBe("ccxt-order-1");
       expect(result.status).toBe("filled");
       expect(result.fillPrice).toBe(65000);
@@ -536,9 +534,7 @@ describe("CCXTExecutor", () => {
     });
 
     it("should fill a market sell order", async () => {
-      ccxtCreateOrder.mockResolvedValue(
-        ccxtOrderResp({ side: "sell", average: 66000 }),
-      );
+      ccxtCreateOrder.mockResolvedValue(ccxtOrderResp({ side: "sell", average: 66000 }));
 
       const result = await executor.placeOrder({
         symbol: "BTC/USDT",
@@ -567,14 +563,7 @@ describe("CCXTExecutor", () => {
         limitPrice: 64500,
       });
 
-      expect(ccxtCreateOrder).toHaveBeenCalledWith(
-        "BTC/USDT",
-        "limit",
-        "buy",
-        0.5,
-        64500,
-        {},
-      );
+      expect(ccxtCreateOrder).toHaveBeenCalledWith("BTC/USDT", "limit", "buy", 0.5, 64500, {});
       expect(result.status).toBe("pending");
       expect(result.fillPrice).toBe(64500);
     });
@@ -777,4 +766,9 @@ describe("interface conformance", () => {
 });
 
 // Reference the types so they're not stripped by isolatedModules.
-export type _Types = { balance: Balance; order: OrderRequest; result: OrderResult; position: Position };
+export type _Types = {
+  balance: Balance;
+  order: OrderRequest;
+  result: OrderResult;
+  position: Position;
+};

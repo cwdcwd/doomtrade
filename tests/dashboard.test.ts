@@ -18,7 +18,7 @@ import type { AppState } from "../src/api/routes.js";
 
 function createTestApp(db: Database, marketCallCounter: { n: number }) {
   const priceProvider = (symbol: string) =>
-    ({ "BTC/USDT": 50000, "ETH/USDT": 3000 } as Record<string, number>)[symbol] ?? null;
+    (({ "BTC/USDT": 50000, "ETH/USDT": 3000 }) as Record<string, number>)[symbol] ?? null;
 
   const agentManager = new AgentManager(db, {
     defaultStartingBalance: 1000,
@@ -107,7 +107,7 @@ describe("GET /api/dashboard", () => {
     const counter = { n: 0 };
     const app = createTestApp(db, counter);
 
-    const mgr = (app as unknown as { _state?: unknown });
+    const mgr = app as unknown as { _state?: unknown };
     void mgr;
 
     const res = await supertest(app).get("/api/dashboard");
@@ -143,9 +143,7 @@ describe("GET /api/dashboard", () => {
     const counter = { n: 0 };
     const app = createTestApp(db, counter);
     const res = await supertest(app).get("/api/dashboard");
-    const btc = res.body.market.research.find(
-      (r: { symbol: string }) => r.symbol === "BTC/USDT",
-    );
+    const btc = res.body.market.research.find((r: { symbol: string }) => r.symbol === "BTC/USDT");
     expect(btc.analysis.indicators.rsi14).toBe(55);
     expect(btc.analysis.signals.combined).toBe("buy");
   });
@@ -155,7 +153,7 @@ describe("GET /api/dashboard", () => {
     const app = createTestApp(db, counter);
 
     // Register one active + one inactive agent, then verify the filter
-    const state = (app as unknown as { _state?: AppState });
+    const state = app as unknown as { _state?: AppState };
     void state;
     // Reach the manager through the router factory's state via re-creation:
     // simpler — register through a second app sharing the same db
@@ -169,9 +167,7 @@ describe("GET /api/dashboard", () => {
     await mgr.deactivate(ghost.id);
 
     const res = await supertest(app).get("/api/dashboard");
-    const names = (res.body.agents as Array<{ agent: { name: string } }>).map(
-      (d) => d.agent.name,
-    );
+    const names = (res.body.agents as Array<{ agent: { name: string } }>).map((d) => d.agent.name);
     expect(names).not.toContain("GhostAgent");
     // LiveAgent may or may not appear depending on the test app's seeding;
     // the invariant is: no inactive agent ever leaks into the payload.

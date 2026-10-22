@@ -102,18 +102,16 @@ describe("API", () => {
   describe("POST /api/decisions", () => {
     it("should create a decision with valid input", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app)
-        .post("/api/decisions")
-        .send({
-          agent: "doom",
-          symbol: "AAPL",
-          action: "buy",
-          quantity: 100,
-          priceAtDecision: 185.0,
-          rationale: "Strong earnings report",
-          confidence: 8,
-          mode: "sim",
-        });
+      const resp = await supertest(app).post("/api/decisions").send({
+        agent: "doom",
+        symbol: "AAPL",
+        action: "buy",
+        quantity: 100,
+        priceAtDecision: 185.0,
+        rationale: "Strong earnings report",
+        confidence: 8,
+        mode: "sim",
+      });
 
       expect(resp.status).toBe(201);
       expect(resp.body.mode).toBe("sim");
@@ -155,18 +153,16 @@ describe("API", () => {
 
     it("should accept any agent name (per-agent trading)", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app)
-        .post("/api/decisions")
-        .send({
-          agent: "ThanosBot",
-          symbol: "AAPL",
-          action: "buy",
-          quantity: 100,
-          priceAtDecision: 185,
-          rationale: "test",
-          confidence: 5,
-          mode: "sim",
-        });
+      const resp = await supertest(app).post("/api/decisions").send({
+        agent: "ThanosBot",
+        symbol: "AAPL",
+        action: "buy",
+        quantity: 100,
+        priceAtDecision: 185,
+        rationale: "test",
+        confidence: 5,
+        mode: "sim",
+      });
 
       expect(resp.status).toBe(201);
       expect(resp.body.decision.agent).toBe("ThanosBot");
@@ -174,53 +170,47 @@ describe("API", () => {
 
     it("should reject negative quantity", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app)
-        .post("/api/decisions")
-        .send({
-          agent: "doom",
-          symbol: "AAPL",
-          action: "buy",
-          quantity: -100,
-          priceAtDecision: 185,
-          rationale: "test",
-          confidence: 5,
-          mode: "sim",
-        });
+      const resp = await supertest(app).post("/api/decisions").send({
+        agent: "doom",
+        symbol: "AAPL",
+        action: "buy",
+        quantity: -100,
+        priceAtDecision: 185,
+        rationale: "test",
+        confidence: 5,
+        mode: "sim",
+      });
 
       expect(resp.status).toBe(400);
     });
 
     it("should reject confidence out of range", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app)
-        .post("/api/decisions")
-        .send({
-          agent: "doom",
-          symbol: "AAPL",
-          action: "buy",
-          quantity: 100,
-          priceAtDecision: 185,
-          rationale: "test",
-          confidence: 15,
-          mode: "sim",
-        });
+      const resp = await supertest(app).post("/api/decisions").send({
+        agent: "doom",
+        symbol: "AAPL",
+        action: "buy",
+        quantity: 100,
+        priceAtDecision: 185,
+        rationale: "test",
+        confidence: 15,
+        mode: "sim",
+      });
 
       expect(resp.status).toBe(400);
     });
 
     it("should reject missing rationale", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app)
-        .post("/api/decisions")
-        .send({
-          agent: "doom",
-          symbol: "AAPL",
-          action: "buy",
-          quantity: 100,
-          priceAtDecision: 185,
-          confidence: 5,
-          mode: "sim",
-        });
+      const resp = await supertest(app).post("/api/decisions").send({
+        agent: "doom",
+        symbol: "AAPL",
+        action: "buy",
+        quantity: 100,
+        priceAtDecision: 185,
+        confidence: 5,
+        mode: "sim",
+      });
 
       expect(resp.status).toBe(400);
     });
@@ -334,16 +324,18 @@ describe("API", () => {
       const { app } = createTestApp(db);
 
       for (let i = 0; i < 5; i++) {
-        await supertest(app).post("/api/decisions").send({
-          agent: "doom",
-          symbol: "AAPL",
-          action: "buy",
-          quantity: 100,
-          priceAtDecision: 185 + i,
-          rationale: `Reason ${i}`,
-          confidence: 5,
-          mode: "sim",
-        });
+        await supertest(app)
+          .post("/api/decisions")
+          .send({
+            agent: "doom",
+            symbol: "AAPL",
+            action: "buy",
+            quantity: 100,
+            priceAtDecision: 185 + i,
+            rationale: `Reason ${i}`,
+            confidence: 5,
+            mode: "sim",
+          });
       }
 
       const resp = await supertest(app).get("/api/decisions?limit=2&offset=0");
@@ -378,9 +370,7 @@ describe("API", () => {
 
     it("should return 404 for non-existent decision", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app).get(
-        "/api/decisions/00000000-0000-4000-8000-000000000000",
-      );
+      const resp = await supertest(app).get("/api/decisions/00000000-0000-4000-8000-000000000000");
 
       expect(resp.status).toBe(404);
       expect(resp.body.error).toBe("Decision not found");

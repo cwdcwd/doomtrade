@@ -28,7 +28,12 @@ function createMockMarketData(prices: Map<string, number>): MarketDataService {
     },
     getBars: async (_symbol: string) => [],
     getSnapshot: async (symbols: string[]) =>
-      symbols.map((s) => ({ symbol: s, price: prices.get(s) ?? 100, timestamp: new Date().toISOString(), source: "ccxt" as const })),
+      symbols.map((s) => ({
+        symbol: s,
+        price: prices.get(s) ?? 100,
+        timestamp: new Date().toISOString(),
+        source: "ccxt" as const,
+      })),
   };
 }
 
