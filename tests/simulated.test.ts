@@ -1,7 +1,15 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Database } from "../src/db/database.js";
-import { openDatabase, closeDatabase, persistDatabase, execAll } from "../src/db/database.js";
-import { SimulatedExchange, type SimulatedExchangeConfig } from "../src/executor/simulated.js";
+import {
+  openDatabase,
+  closeDatabase,
+  persistDatabase,
+  execAll,
+} from "../src/db/database.js";
+import {
+  SimulatedExchange,
+  type SimulatedExchangeConfig,
+} from "../src/executor/simulated.js";
 import type { OrderRequest } from "../src/executor/executor.js";
 
 describe("SimulatedExchange", () => {

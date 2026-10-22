@@ -30,11 +30,7 @@ function makeMockMarketData(bars: Bar[]): MarketDataService {
 }
 
 // Generate synthetic daily bars for testing
-function generateBars(
-  startPrice: number,
-  count: number,
-  trend: "up" | "down" | "flat" = "flat",
-): Bar[] {
+function generateBars(startPrice: number, count: number, trend: "up" | "down" | "flat" = "flat"): Bar[] {
   const bars: Bar[] = [];
   let price = startPrice;
   const now = Date.now();
@@ -193,15 +189,9 @@ describe("ResearchService", () => {
 
     it("throws when no bar data available", async () => {
       const marketData: MarketDataService = {
-        async getQuote(): Promise<Quote> {
-          throw new Error("no data");
-        },
-        async getBars(): Promise<Bar[]> {
-          return [];
-        },
-        async getSnapshot(): Promise<Snapshot[]> {
-          return [];
-        },
+        async getQuote(): Promise<Quote> { throw new Error("no data"); },
+        async getBars(): Promise<Bar[]> { return []; },
+        async getSnapshot(): Promise<Snapshot[]> { return []; },
       };
       const research = new ResearchService(marketData);
 
@@ -219,12 +209,8 @@ describe("ResearchService", () => {
         bars.push({
           symbol: "TEST/USDT",
           timestamp: new Date(now - (70 - i) * 86400000).toISOString(),
-          open: price + 0.25,
-          high: price + 0.5,
-          low: price - 0.5,
-          close: price,
-          volume: 1000,
-          source: "ccxt" as const,
+          open: price + 0.25, high: price + 0.5, low: price - 0.5, close: price,
+          volume: 1000, source: "ccxt" as const,
         });
       }
       for (let i = 0; i < 30; i++) {
@@ -232,12 +218,8 @@ describe("ResearchService", () => {
         bars.push({
           symbol: "TEST/USDT",
           timestamp: new Date(now - (30 - i) * 86400000).toISOString(),
-          open: price - 1,
-          high: price + 1,
-          low: price - 1.5,
-          close: price,
-          volume: 1000,
-          source: "ccxt" as const,
+          open: price - 1, high: price + 1, low: price - 1.5, close: price,
+          volume: 1000, source: "ccxt" as const,
         });
       }
 

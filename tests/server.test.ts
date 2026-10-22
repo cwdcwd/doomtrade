@@ -252,16 +252,18 @@ describe("buildServer", () => {
     // limitPrice — the only path that calls the server-wired
     // priceProvider.getQuote closure (server.ts) and the SimulatedExchange
     // getCurrentPrice fallback closure.
-    const created = await supertest(app).post("/api/decisions").send({
-      agent: "doom",
-      symbol: "AAPL",
-      action: "buy",
-      quantity: 10,
-      priceAtDecision: 185,
-      rationale: "cover the provider closure",
-      confidence: 7,
-      mode: "sim",
-    });
+    const created = await supertest(app)
+      .post("/api/decisions")
+      .send({
+        agent: "doom",
+        symbol: "AAPL",
+        action: "buy",
+        quantity: 10,
+        priceAtDecision: 185,
+        rationale: "cover the provider closure",
+        confidence: 7,
+        mode: "sim",
+      });
     expect(created.status).toBe(201);
     const decisionId = created.body.decision.id;
 
@@ -296,7 +298,9 @@ describe("buildServer", () => {
   });
 
   it("mounts clerkMiddleware when Clerk is configured", async () => {
-    const pk = "pk_test_" + Buffer.from("clerk.example.com$").toString("base64").replace(/=+$/, "");
+    const pk =
+      "pk_test_" +
+      Buffer.from("clerk.example.com$").toString("base64").replace(/=+$/, "");
     const { app, state } = await buildServer(
       makeConfig({
         clerkSecretKey: "sk_test_abcdefghij0123456789",

@@ -72,7 +72,10 @@ function makeConfig(overrides: Partial<Config> = {}) {
  * `sessionUserId` (may be null) is attached to req.auth by attachStubAuth
  * as a branded function — the exact shape clerkMiddleware produces.
  */
-function makeApp(state: AppState, sessionUserId: string | null | undefined): express.Express {
+function makeApp(
+  state: AppState,
+  sessionUserId: string | null | undefined,
+): express.Express {
   const app = express();
   app.use(express.json());
   if (sessionUserId !== undefined) {
@@ -178,9 +181,7 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
   });
 
   function userLookup(username: string) {
-    return {
-      getUser: async (userId: string) => ({ username: userId === ADMIN_ID ? username : "other" }),
-    };
+    return { getUser: async (userId: string) => ({ username: userId === ADMIN_ID ? username : "other" }) };
   }
 
   it("/me: anonymous (no session) → {authenticated:false} + publishable key", async () => {
@@ -293,19 +294,19 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
     const app = makeApp(state, ADMIN_ID);
 
     const badBodies = [
-      { ...VALID_LIMITS, maxOpenPositions: 0 }, // < 1
-      { ...VALID_LIMITS, maxOpenPositions: 51 }, // > 50
-      { ...VALID_LIMITS, maxPositionSizePct: 0 }, // < 1
-      { ...VALID_LIMITS, maxPositionSizePct: 101 }, // > 100
-      { ...VALID_LIMITS, dailyTradeLimit: 0 }, // < 1
-      { ...VALID_LIMITS, dailyTradeLimit: 101 }, // > 100
-      { ...VALID_LIMITS, maxDrawdownPct: 0 }, // < 1
-      { ...VALID_LIMITS, maxDrawdownPct: 51 }, // > 50
-      { ...VALID_LIMITS, simStartingBalance: 0 }, // not > 0
-      { ...VALID_LIMITS, simStartingBalance: -5 }, // negative
-      { ...VALID_LIMITS, simFeePct: -0.01 }, // < 0
-      { ...VALID_LIMITS, simFeePct: 1.01 }, // > 1
-      { ...VALID_LIMITS, maxOpenPositions: 5.5 }, // non-integer
+      { ...VALID_LIMITS, maxOpenPositions: 0 },        // < 1
+      { ...VALID_LIMITS, maxOpenPositions: 51 },       // > 50
+      { ...VALID_LIMITS, maxPositionSizePct: 0 },      // < 1
+      { ...VALID_LIMITS, maxPositionSizePct: 101 },    // > 100
+      { ...VALID_LIMITS, dailyTradeLimit: 0 },         // < 1
+      { ...VALID_LIMITS, dailyTradeLimit: 101 },       // > 100
+      { ...VALID_LIMITS, maxDrawdownPct: 0 },          // < 1
+      { ...VALID_LIMITS, maxDrawdownPct: 51 },         // > 50
+      { ...VALID_LIMITS, simStartingBalance: 0 },      // not > 0
+      { ...VALID_LIMITS, simStartingBalance: -5 },     // negative
+      { ...VALID_LIMITS, simFeePct: -0.01 },           // < 0
+      { ...VALID_LIMITS, simFeePct: 1.01 },            // > 1
+      { ...VALID_LIMITS, maxOpenPositions: 5.5 },      // non-integer
     ];
 
     for (const body of badBodies) {
@@ -329,14 +330,11 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
   });
 
   it("fail-closed: configured but ADMIN_CLERK_USER_ID empty → even admin-ish session 403", async () => {
-    const state = makeState(
-      db,
-      makeConfig({
-        clerkSecretKey: "sk_mocksecretkey_000001",
-        clerkPublishableKey: "pk_mock_000001",
-        adminClerkUserId: "",
-      }),
-    );
+    const state = makeState(db, makeConfig({
+      clerkSecretKey: "sk_mocksecretkey_000001",
+      clerkPublishableKey: "pk_mock_000001",
+      adminClerkUserId: "",
+    }));
     const app = makeApp(state, ADMIN_ID);
     const res = await supertest(app).get("/api/management/risk-limits");
     expect(res.status).toBe(403);
@@ -358,8 +356,8 @@ describe("Management routes — Clerk configured (mocked sessions)", () => {
       config.maxOpenPositions = parsed.data.maxOpenPositions;
       config.dailyTradeLimit = parsed.data.dailyTradeLimit;
     }
-    expect(config.maxOpenPositions).toBe(5); // DB row won
-    expect(config.dailyTradeLimit).toBe(30); // DB row won
+    expect(config.maxOpenPositions).toBe(5);      // DB row won
+    expect(config.dailyTradeLimit).toBe(30);      // DB row won
   });
 });
 
@@ -383,13 +381,7 @@ describe("Clerk guard unit tests (src/api/clerk.ts)", () => {
 
   it("isAdminUser: no configured admin → false (fail closed)", async () => {
     const { isAdminUser } = await import("../src/api/clerk.js");
-    expect(
-      isAdminUser("user_x", {
-        clerkSecretKey: "sk_mock_x",
-        clerkPublishableKey: "pk",
-        adminClerkUserId: "",
-      }),
-    ).toBe(false);
+    expect(isAdminUser("user_x", { clerkSecretKey: "sk_mock_x", clerkPublishableKey: "pk", adminClerkUserId: "" })).toBe(false);
   });
 });
 
@@ -410,9 +402,7 @@ describe("Clerk FAPI origin derivation (fleet-ops-mmt.2)", () => {
   it("derives the FAPI origin from a pk_live_ key", async () => {
     const { clerkFapiOrigin } = await import("../src/api/clerk.js");
     const livePk = pk("clerk.example.com");
-    expect(clerkFapiOrigin(livePk.replace("pk_test_", "pk_live_"))).toBe(
-      "https://clerk.example.com",
-    );
+    expect(clerkFapiOrigin(livePk.replace("pk_test_", "pk_live_"))).toBe("https://clerk.example.com");
   });
 
   it("rejects malformed keys — fail closed", async () => {
@@ -447,16 +437,10 @@ describe("Clerk FAPI origin derivation (fleet-ops-mmt.2)", () => {
 
   it("CSP directives: dev-open (unconfigured) → empty (helmet defaults unchanged)", async () => {
     const { clerkCspDirectives } = await import("../src/api/clerk.js");
-    expect(
-      clerkCspDirectives({ clerkSecretKey: "", clerkPublishableKey: "", adminClerkUserId: "" }),
-    ).toEqual({});
+    expect(clerkCspDirectives({ clerkSecretKey: "", clerkPublishableKey: "", adminClerkUserId: "" })).toEqual({});
     // sk_ present but pk malformed → still fail closed
     expect(
-      clerkCspDirectives({
-        clerkSecretKey: "sk_test_1234567890",
-        clerkPublishableKey: "junk",
-        adminClerkUserId: "",
-      }),
+      clerkCspDirectives({ clerkSecretKey: "sk_test_1234567890", clerkPublishableKey: "junk", adminClerkUserId: "" }),
     ).toEqual({});
   });
 });

@@ -17,10 +17,7 @@ beforeEach(async () => {
 
 describe("AgentManager", () => {
   it("registers a new agent", async () => {
-    const agent = await manager.register("TestBot", {
-      startingBalance: 50,
-      strategy: "momentum-rotation",
-    });
+    const agent = await manager.register("TestBot", { startingBalance: 50, strategy: "momentum-rotation" });
     expect(agent.name).toBe("TestBot");
     expect(agent.startingBalance).toBe(50);
     expect(agent.strategy).toBe("momentum-rotation");
@@ -216,24 +213,16 @@ describe("AgentExchange", () => {
     const exchange = manager.getExchange(agent.id);
 
     await exchange.placeOrder({
-      symbol: "ETH/USDT",
-      side: "buy",
-      quantity: 1,
-      orderType: "limit",
-      limitPrice: 50,
+      symbol: "ETH/USDT", side: "buy", quantity: 1, orderType: "limit", limitPrice: 50,
     });
     await exchange.placeOrder({
-      symbol: "ETH/USDT",
-      side: "sell",
-      quantity: 1,
-      orderType: "limit",
-      limitPrice: 55,
+      symbol: "ETH/USDT", side: "sell", quantity: 1, orderType: "limit", limitPrice: 55,
     });
 
     const trades = await exchange.getTrades();
     expect(trades).toHaveLength(2);
     // One buy and one sell — order may vary due to same-timestamp ordering
-    const sides = trades.map((t) => t.side).sort();
+    const sides = trades.map(t => t.side).sort();
     expect(sides).toEqual(["buy", "sell"]);
   });
 
@@ -242,11 +231,7 @@ describe("AgentExchange", () => {
     const exchange = manager.getExchange(agent.id);
 
     await exchange.placeOrder({
-      symbol: "ETH/USDT",
-      side: "buy",
-      quantity: 1,
-      orderType: "limit",
-      limitPrice: 50,
+      symbol: "ETH/USDT", side: "buy", quantity: 1, orderType: "limit", limitPrice: 50,
     });
 
     await exchange.recordCheckpoint();
@@ -263,11 +248,7 @@ describe("AgentExchange", () => {
     const kangbotEx = manager.getExchange(kangbot.id);
 
     await doomEx.placeOrder({
-      symbol: "BTC/USDT",
-      side: "buy",
-      quantity: 0.001,
-      orderType: "limit",
-      limitPrice: 50000,
+      symbol: "BTC/USDT", side: "buy", quantity: 0.001, orderType: "limit", limitPrice: 50000,
     });
 
     // Doom has a position, Kangbot doesn't

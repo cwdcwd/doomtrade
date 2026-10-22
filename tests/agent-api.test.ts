@@ -76,12 +76,7 @@ function createTestApp(db: Database) {
     },
     getBars: async (_symbol: string) => [],
     getSnapshot: async (symbols: string[]) =>
-      symbols.map((s) => ({
-        symbol: s,
-        price: prices.get(s) ?? 100,
-        timestamp: new Date().toISOString(),
-        source: "ccxt" as const,
-      })),
+      symbols.map((s) => ({ symbol: s, price: prices.get(s) ?? 100, timestamp: new Date().toISOString(), source: "ccxt" as const })),
   };
 
   const agentPipeline = new AgentTradingPipeline({
@@ -130,11 +125,13 @@ describe("Agent API", () => {
   describe("POST /api/agents", () => {
     it("should register a new agent", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app).post("/api/agents").send({
-        name: "TestAgent",
-        startingBalance: 200,
-        strategy: "momentum-rotation",
-      });
+      const resp = await supertest(app)
+        .post("/api/agents")
+        .send({
+          name: "TestAgent",
+          startingBalance: 200,
+          strategy: "momentum-rotation",
+        });
 
       expect(resp.status).toBe(201);
       expect(resp.body.agent.name).toBe("TestAgent");
@@ -146,7 +143,9 @@ describe("Agent API", () => {
 
     it("should register with defaults", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app).post("/api/agents").send({ name: "MinimalAgent" });
+      const resp = await supertest(app)
+        .post("/api/agents")
+        .send({ name: "MinimalAgent" });
 
       expect(resp.status).toBe(201);
       expect(resp.body.agent.name).toBe("MinimalAgent");
@@ -155,14 +154,18 @@ describe("Agent API", () => {
 
     it("should reject missing name", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app).post("/api/agents").send({ startingBalance: 100 });
+      const resp = await supertest(app)
+        .post("/api/agents")
+        .send({ startingBalance: 100 });
 
       expect(resp.status).toBe(400);
     });
 
     it("should reject empty name", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app).post("/api/agents").send({ name: "" });
+      const resp = await supertest(app)
+        .post("/api/agents")
+        .send({ name: "" });
 
       expect(resp.status).toBe(400);
     });
@@ -237,7 +240,9 @@ describe("Agent API", () => {
       const { app, agentManager } = createTestApp(db);
       const agent = await agentManager.register("TestBot");
 
-      const resp = await supertest(app).patch(`/api/agents/${agent.id}`).send({ active: false });
+      const resp = await supertest(app)
+        .patch(`/api/agents/${agent.id}`)
+        .send({ active: false });
 
       expect(resp.status).toBe(200);
       expect(resp.body.agent.active).toBe(false);
@@ -257,7 +262,9 @@ describe("Agent API", () => {
 
     it("should return 404 for unknown agent", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app).patch("/api/agents/nonexistent").send({ strategy: "test" });
+      const resp = await supertest(app)
+        .patch("/api/agents/nonexistent")
+        .send({ strategy: "test" });
 
       expect(resp.status).toBe(404);
     });
@@ -558,7 +565,9 @@ describe("Agent API", () => {
       expect(tradesBefore).toHaveLength(1);
 
       // Reset
-      const resp = await supertest(app).post("/api/admin/reset").send({ confirm: "WIPE_ALL_DATA" });
+      const resp = await supertest(app)
+        .post("/api/admin/reset")
+        .send({ confirm: "WIPE_ALL_DATA" });
 
       expect(resp.status).toBe(200);
 
@@ -571,10 +580,7 @@ describe("Agent API", () => {
       const { execGet, convertPlaceholders } = await import("../src/db/database.js");
       const tradeCount = await execGet<{ count: number }>(
         db,
-        convertPlaceholders(
-          "SELECT COUNT(*) as count FROM agent_orders WHERE agent_id = ?",
-          db.backend,
-        ),
+        convertPlaceholders("SELECT COUNT(*) as count FROM agent_orders WHERE agent_id = ?", db.backend),
         [agent.id],
       );
       expect(tradeCount?.count ?? 0).toBe(0);
@@ -586,16 +592,18 @@ describe("Agent API", () => {
   describe("Agent name flexibility (decisions table constraint)", () => {
     it("should accept decisions with any agent name", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app).post("/api/decisions").send({
-        agent: "ThanosBot",
-        symbol: "AAPL",
-        action: "buy",
-        quantity: 10,
-        priceAtDecision: 185,
-        rationale: "Test",
-        confidence: 7,
-        mode: "sim",
-      });
+      const resp = await supertest(app)
+        .post("/api/decisions")
+        .send({
+          agent: "ThanosBot",
+          symbol: "AAPL",
+          action: "buy",
+          quantity: 10,
+          priceAtDecision: 185,
+          rationale: "Test",
+          confidence: 7,
+          mode: "sim",
+        });
 
       expect(resp.status).toBe(201);
       expect(resp.body.decision.agent).toBe("ThanosBot");
@@ -603,16 +611,18 @@ describe("Agent API", () => {
 
     it("should accept decisions with custom agent names", async () => {
       const { app } = createTestApp(db);
-      const resp = await supertest(app).post("/api/decisions").send({
-        agent: "CustomAgent42",
-        symbol: "BTC/USDT",
-        action: "hold",
-        quantity: 1,
-        priceAtDecision: 50000,
-        rationale: "Waiting for better entry",
-        confidence: 5,
-        mode: "sim",
-      });
+      const resp = await supertest(app)
+        .post("/api/decisions")
+        .send({
+          agent: "CustomAgent42",
+          symbol: "BTC/USDT",
+          action: "hold",
+          quantity: 1,
+          priceAtDecision: 50000,
+          rationale: "Waiting for better entry",
+          confidence: 5,
+          mode: "sim",
+        });
 
       expect(resp.status).toBe(201);
       expect(resp.body.decision.agent).toBe("CustomAgent42");

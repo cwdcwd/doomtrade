@@ -1,8 +1,14 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { randomUUID } from "node:crypto";
 import type { Database } from "../src/db/database.js";
-import { openDatabase, closeDatabase, execAll } from "../src/db/database.js";
-import { SimulatedExchange } from "../src/executor/simulated.js";
+import {
+  openDatabase,
+  closeDatabase,
+  execAll,
+} from "../src/db/database.js";
+import {
+  SimulatedExchange,
+} from "../src/executor/simulated.js";
 import { TradeEngine } from "../src/engine/trade-engine.js";
 import type { Decision } from "../src/decision/decision.js";
 import type { Config } from "../src/config.js";
@@ -84,12 +90,7 @@ describe("TradeEngine", () => {
 
       // Now sell
       prices.set("AAPL", 195.0);
-      const sellDecision = makeDecision({
-        action: "sell",
-        symbol: "AAPL",
-        quantity: 100,
-        priceAtDecision: 195.0,
-      });
+      const sellDecision = makeDecision({ action: "sell", symbol: "AAPL", quantity: 100, priceAtDecision: 195.0 });
       const result = await engine.executeDecision({ decision: sellDecision });
 
       expect(result.riskPassed).toBe(true);
@@ -181,12 +182,7 @@ describe("TradeEngine", () => {
       await engine.executeDecision({ decision: makeDecision({ action: "buy", symbol: "AAPL" }) });
       // Create a rejected trade
       await engine.executeDecision({
-        decision: makeDecision({
-          action: "buy",
-          symbol: "BTC/USDT",
-          quantity: 10,
-          priceAtDecision: 65000,
-        }),
+        decision: makeDecision({ action: "buy", symbol: "BTC/USDT", quantity: 10, priceAtDecision: 65000 }),
       });
 
       const filled = await engine.listTrades({ status: "filled" });
@@ -220,9 +216,7 @@ describe("TradeEngine", () => {
 
     it("should pass when adding to an existing position", async () => {
       // Buy AAPL — first position
-      await engine.executeDecision({
-        decision: makeDecision({ action: "buy", symbol: "AAPL", quantity: 10 }),
-      });
+      await engine.executeDecision({ decision: makeDecision({ action: "buy", symbol: "AAPL", quantity: 10 }) });
 
       // Buy more AAPL — should not count as new position
       const result = await engine.executeDecision({
@@ -241,28 +235,14 @@ describe("TradeEngine", () => {
       });
 
       // Buy 3 different symbols
-      await tightEngine.executeDecision({
-        decision: makeDecision({ action: "buy", symbol: "AAPL", quantity: 10 }),
-      });
+      await tightEngine.executeDecision({ decision: makeDecision({ action: "buy", symbol: "AAPL", quantity: 10 }) });
       prices.set("GOOGL", 140.0);
-      await tightEngine.executeDecision({
-        decision: makeDecision({
-          action: "buy",
-          symbol: "GOOGL",
-          quantity: 10,
-          priceAtDecision: 140,
-        }),
-      });
+      await tightEngine.executeDecision({ decision: makeDecision({ action: "buy", symbol: "GOOGL", quantity: 10, priceAtDecision: 140 }) });
 
       // Third new symbol should fail
       prices.set("TSLA", 250.0);
       const result = await tightEngine.executeDecision({
-        decision: makeDecision({
-          action: "buy",
-          symbol: "TSLA",
-          quantity: 10,
-          priceAtDecision: 250,
-        }),
+        decision: makeDecision({ action: "buy", symbol: "TSLA", quantity: 10, priceAtDecision: 250 }),
       });
 
       const check = result.riskChecks.find((c) => c.check === "maxOpenPositions");
@@ -315,9 +295,7 @@ describe("TradeEngine", () => {
 
   describe("risk check: dailyTradeLimit", () => {
     it("should pass when under the daily limit", async () => {
-      const result = await engine.executeDecision({
-        decision: makeDecision({ action: "buy", quantity: 10 }),
-      });
+      const result = await engine.executeDecision({ decision: makeDecision({ action: "buy", quantity: 10 }) });
 
       const check = result.riskChecks.find((c) => c.check === "dailyTradeLimit");
       expect(check!.passed).toBe(true);
@@ -330,28 +308,14 @@ describe("TradeEngine", () => {
       });
 
       // Make 2 successful trades
-      await tightEngine.executeDecision({
-        decision: makeDecision({ action: "buy", symbol: "AAPL", quantity: 10 }),
-      });
+      await tightEngine.executeDecision({ decision: makeDecision({ action: "buy", symbol: "AAPL", quantity: 10 }) });
       prices.set("MSFT", 420);
-      await tightEngine.executeDecision({
-        decision: makeDecision({
-          action: "buy",
-          symbol: "MSFT",
-          quantity: 10,
-          priceAtDecision: 420,
-        }),
-      });
+      await tightEngine.executeDecision({ decision: makeDecision({ action: "buy", symbol: "MSFT", quantity: 10, priceAtDecision: 420 }) });
 
       // Third trade should fail daily limit
       prices.set("GOOGL", 140);
       const result = await tightEngine.executeDecision({
-        decision: makeDecision({
-          action: "buy",
-          symbol: "GOOGL",
-          quantity: 10,
-          priceAtDecision: 140,
-        }),
+        decision: makeDecision({ action: "buy", symbol: "GOOGL", quantity: 10, priceAtDecision: 140 }),
       });
 
       const check = result.riskChecks.find((c) => c.check === "dailyTradeLimit");
@@ -372,12 +336,7 @@ describe("TradeEngine", () => {
 
       // This valid trade should still pass the daily limit
       const result = await tightEngine.executeDecision({
-        decision: makeDecision({
-          action: "buy",
-          symbol: "AAPL",
-          quantity: 10,
-          priceAtDecision: 185,
-        }),
+        decision: makeDecision({ action: "buy", symbol: "AAPL", quantity: 10, priceAtDecision: 185 }),
       });
 
       const check = result.riskChecks.find((c) => c.check === "dailyTradeLimit");
@@ -389,9 +348,7 @@ describe("TradeEngine", () => {
 
   describe("risk check: maxDrawdown", () => {
     it("should pass when drawdown is within limit", async () => {
-      const result = await engine.executeDecision({
-        decision: makeDecision({ action: "buy", quantity: 10 }),
-      });
+      const result = await engine.executeDecision({ decision: makeDecision({ action: "buy", quantity: 10 }) });
       const check = result.riskChecks.find((c) => c.check === "maxDrawdown");
       expect(check!.passed).toBe(true);
     });
@@ -409,12 +366,7 @@ describe("TradeEngine", () => {
       // Buy another symbol to test — drawdown is under 15%, should pass
       prices.set("MSFT", 420);
       let result = await engine.executeDecision({
-        decision: makeDecision({
-          action: "buy",
-          symbol: "MSFT",
-          quantity: 10,
-          priceAtDecision: 420,
-        }),
+        decision: makeDecision({ action: "buy", symbol: "MSFT", quantity: 10, priceAtDecision: 420 }),
       });
       let check = result.riskChecks.find((c) => c.check === "maxDrawdown");
       expect(check!.passed).toBe(true);
@@ -432,12 +384,7 @@ describe("TradeEngine", () => {
       prices.set("GOOGL", 140);
 
       result = await engine.executeDecision({
-        decision: makeDecision({
-          action: "buy",
-          symbol: "GOOGL",
-          quantity: 1,
-          priceAtDecision: 140,
-        }),
+        decision: makeDecision({ action: "buy", symbol: "GOOGL", quantity: 1, priceAtDecision: 140 }),
       });
       check = result.riskChecks.find((c) => c.check === "maxDrawdown");
       expect(check!.passed).toBe(false);
@@ -447,9 +394,7 @@ describe("TradeEngine", () => {
 
     it("should pass when no peak equity established (zero)", async () => {
       // Fresh engine with a balance that has 0 peak equity — edge case
-      const result = await engine.executeDecision({
-        decision: makeDecision({ action: "buy", quantity: 1 }),
-      });
+      const result = await engine.executeDecision({ decision: makeDecision({ action: "buy", quantity: 1 }) });
       const check = result.riskChecks.find((c) => c.check === "maxDrawdown");
       expect(check!.passed).toBe(true);
     });
@@ -493,9 +438,7 @@ describe("TradeEngine", () => {
 
   describe("mode logging", () => {
     it("should log sim mode when config is sim", async () => {
-      const result = await engine.executeDecision({
-        decision: makeDecision({ action: "buy", quantity: 10 }),
-      });
+      const result = await engine.executeDecision({ decision: makeDecision({ action: "buy", quantity: 10 }) });
       expect(result.tradeRecord!.mode).toBe("sim");
     });
 
@@ -504,9 +447,7 @@ describe("TradeEngine", () => {
         ...riskConfig,
         tradeMode: "live",
       });
-      const result = await liveEngine.executeDecision({
-        decision: makeDecision({ action: "buy", quantity: 10 }),
-      });
+      const result = await liveEngine.executeDecision({ decision: makeDecision({ action: "buy", quantity: 10 }) });
       expect(result.tradeRecord!.mode).toBe("live");
     });
   });
@@ -515,9 +456,7 @@ describe("TradeEngine", () => {
 
   describe("executor name", () => {
     it("should record the executor name on the trade", async () => {
-      const result = await engine.executeDecision({
-        decision: makeDecision({ action: "buy", quantity: 10 }),
-      });
+      const result = await engine.executeDecision({ decision: makeDecision({ action: "buy", quantity: 10 }) });
       expect(result.tradeRecord!.executor).toBe("simulated");
     });
   });
@@ -538,12 +477,7 @@ describe("TradeEngine", () => {
       expect(await engine.getDailyTradeCount()).toBe(1);
 
       await engine.executeDecision({
-        decision: makeDecision({
-          action: "buy",
-          symbol: "MSFT",
-          quantity: 10,
-          priceAtDecision: 420,
-        }),
+        decision: makeDecision({ action: "buy", symbol: "MSFT", quantity: 10, priceAtDecision: 420 }),
       });
       expect(await engine.getDailyTradeCount()).toBe(2);
     });

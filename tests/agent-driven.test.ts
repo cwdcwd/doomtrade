@@ -19,10 +19,7 @@ beforeEach(async () => {
 });
 
 describe("AgentDrivenStrategy", () => {
-  function buildContext(
-    themeId: string,
-    getPrice: (s: string) => number = () => 100,
-  ): ThemeContext {
+  function buildContext(themeId: string, getPrice: (s: string) => number = () => 100): ThemeContext {
     return {
       db,
       marketData: { getQuote: async () => ({ price: 100 }) } as any,

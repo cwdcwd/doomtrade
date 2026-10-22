@@ -1,6 +1,10 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import type { Database } from "../src/db/database.js";
-import { openDatabase, closeDatabase, execAll } from "../src/db/database.js";
+import {
+  openDatabase,
+  closeDatabase,
+  execAll,
+} from "../src/db/database.js";
 import { DecisionStore } from "../src/decision/decision-store.js";
 import type { CreateDecisionInput } from "../src/decision/decision.js";
 
@@ -73,7 +77,9 @@ describe("DecisionStore", () => {
       const decision = await store.create(sampleInput);
 
       expect(decision.id).toBeTruthy();
-      expect(decision.id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+      expect(decision.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/,
+      );
       expect(decision.timestamp).toBeTruthy();
       expect(decision.agent).toBe("kangbot");
       expect(decision.symbol).toBe("AAPL");
@@ -102,7 +108,9 @@ describe("DecisionStore", () => {
     });
 
     it("should reject invalid action", async () => {
-      await expect(store.create({ ...sampleInput, action: "invalid" as never })).rejects.toThrow();
+      await expect(
+        store.create({ ...sampleInput, action: "invalid" as never }),
+      ).rejects.toThrow();
     });
 
     it("should reject confidence out of range (0)", async () => {
@@ -114,11 +122,15 @@ describe("DecisionStore", () => {
     });
 
     it("should reject negative quantity", async () => {
-      await expect(store.create({ ...sampleInput, quantity: -10 })).rejects.toThrow();
+      await expect(
+        store.create({ ...sampleInput, quantity: -10 }),
+      ).rejects.toThrow();
     });
 
     it("should reject empty rationale", async () => {
-      await expect(store.create({ ...sampleInput, rationale: "" })).rejects.toThrow();
+      await expect(
+        store.create({ ...sampleInput, rationale: "" }),
+      ).rejects.toThrow();
     });
   });
 

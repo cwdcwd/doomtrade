@@ -124,10 +124,9 @@ function overboughtBars(symbol: string): Bar[] {
  * Build a neutral price series (alternating around a midpoint).
  */
 function neutralBars(symbol: string): Bar[] {
-  const prices = [
-    50, 50.5, 49.5, 50.2, 49.8, 50.1, 49.9, 50.3, 49.7, 50.0, 50.2, 49.8, 50.1, 49.9, 50.0, 50.1,
-    50.0, 49.9, 50.1, 50.0, 50.2, 49.8, 50.1, 49.9, 50.0, 50.1, 50.0, 49.9, 50.1, 50.0,
-  ];
+  const prices = [50, 50.5, 49.5, 50.2, 49.8, 50.1, 49.9, 50.3, 49.7, 50.0,
+    50.2, 49.8, 50.1, 49.9, 50.0, 50.1, 50.0, 49.9, 50.1, 50.0,
+    50.2, 49.8, 50.1, 49.9, 50.0, 50.1, 50.0, 49.9, 50.1, 50.0];
   return barsFromCloses(prices, symbol);
 }
 
@@ -174,9 +173,9 @@ function buildConfig(
 describe("MomentumScreenSignalSource", () => {
   it("returns correct signals for sma-crossover (buy and sell)", async () => {
     const barsBySymbol: Record<string, Bar[]> = {
-      AAPL: goldenCrossBars("AAPL"), // golden cross -> buy
-      TSLA: deathCrossBars("TSLA"), // death cross -> sell
-      CASH: neutralBars("CASH"), // no crossover -> neutral (omitted)
+      "AAPL": goldenCrossBars("AAPL"),  // golden cross -> buy
+      "TSLA": deathCrossBars("TSLA"),  // death cross -> sell
+      "CASH": neutralBars("CASH"),     // no crossover -> neutral (omitted)
     };
 
     const marketData = createMockMarketData(barsBySymbol);
@@ -214,9 +213,9 @@ describe("MomentumScreenSignalSource", () => {
 
   it("returns correct signals for RSI (oversold and overbought)", async () => {
     const barsBySymbol: Record<string, Bar[]> = {
-      OVER: oversoldBars("OVER"), // RSI < 30 -> buy
-      BOUGHT: overboughtBars("BOUGHT"), // RSI > 70 -> sell
-      NEUT: neutralBars("NEUT"), // 30 <= RSI <= 70 -> neutral (omitted)
+      "OVER": oversoldBars("OVER"),    // RSI < 30 -> buy
+      "BOUGHT": overboughtBars("BOUGHT"), // RSI > 70 -> sell
+      "NEUT": neutralBars("NEUT"),     // 30 <= RSI <= 70 -> neutral (omitted)
     };
 
     const marketData = createMockMarketData(barsBySymbol);
@@ -255,7 +254,7 @@ describe("MomentumScreenSignalSource", () => {
     for (let i = 0; i < 60; i++) prices.push(100 - i * 0.5); // decline
     for (let i = 0; i < 30; i++) prices.push(70 + i * 3); // sharp uptrend -> golden cross AND RSI ~98
     const barsBySymbol: Record<string, Bar[]> = {
-      MIX: barsFromCloses(prices, "MIX"),
+      "MIX": barsFromCloses(prices, "MIX"),
     };
 
     const marketData = createMockMarketData(barsBySymbol);
@@ -291,13 +290,12 @@ describe("MomentumScreenSignalSource", () => {
     // to ~49. Golden cross within window + RSI not overbought => BUY.
     const prices: number[] = [];
     for (let i = 0; i < 55; i++) prices.push(100 - i * 0.05);
-    for (let i = 0; i < 12; i++)
-      prices.push(prices[prices.length - 1] + (i % 2 === 0 ? 1.5 : -0.75));
+    for (let i = 0; i < 12; i++) prices.push(prices[prices.length - 1] + (i % 2 === 0 ? 1.5 : -0.75));
     for (let i = 0; i < 3; i++) prices.push(prices[prices.length - 1] - 0.8);
     expect(prices).toHaveLength(70);
 
     const barsBySymbol: Record<string, Bar[]> = {
-      GOLD: barsFromCloses(prices, "GOLD"),
+      "GOLD": barsFromCloses(prices, "GOLD"),
     };
 
     const marketData = createMockMarketData(barsBySymbol);
@@ -326,15 +324,14 @@ describe("MomentumScreenSignalSource", () => {
     // silent; now the window bounds how stale a cross may be.)
     const prices: number[] = [];
     for (let i = 0; i < 55; i++) prices.push(100 - i * 0.05);
-    for (let i = 0; i < 12; i++)
-      prices.push(prices[prices.length - 1] + (i % 2 === 0 ? 1.5 : -0.75));
+    for (let i = 0; i < 12; i++) prices.push(prices[prices.length - 1] + (i % 2 === 0 ? 1.5 : -0.75));
     for (let i = 0; i < 3; i++) prices.push(prices[prices.length - 1] - 0.8);
     // Append 6 flat bars -> pushes the cross beyond the 5-bar window
     for (let i = 0; i < 6; i++) prices.push(prices[prices.length - 1] + 0.05);
     expect(prices).toHaveLength(76);
 
     const barsBySymbol: Record<string, Bar[]> = {
-      STALE: barsFromCloses(prices, "STALE"),
+      "STALE": barsFromCloses(prices, "STALE"),
     };
 
     const marketData = createMockMarketData(barsBySymbol);
@@ -363,8 +360,7 @@ describe("MomentumScreenSignalSource", () => {
     // even at crossWindow=0.
     const prices: number[] = [];
     for (let i = 0; i < 55; i++) prices.push(100 - i * 0.05);
-    for (let i = 0; i < 12; i++)
-      prices.push(prices[prices.length - 1] + (i % 2 === 0 ? 1.5 : -0.75));
+    for (let i = 0; i < 12; i++) prices.push(prices[prices.length - 1] + (i % 2 === 0 ? 1.5 : -0.75));
     for (let i = 0; i < 3; i++) prices.push(prices[prices.length - 1] - 0.8);
     // Trim to the exact bar where the cross fires (lag 5 from the 70-bar series)
     const crossAt = 65; // 70 - 5
@@ -372,12 +368,8 @@ describe("MomentumScreenSignalSource", () => {
     // At slice len 65 the cross fired with lag 5 in the 70-bar series; here
     // it fires on the exact last bar. Verify empirically inside the test via
     // the source — with crossWindow=0 only exact-bar crosses count.
-    expect(
-      combinedSignalRef(trimmed, { fastPeriod: 20, slowPeriod: 50, rsiPeriod: 14, crossWindow: 0 }),
-    ).toBe("buy");
-    expect(
-      combinedSignalRef(prices, { fastPeriod: 20, slowPeriod: 50, rsiPeriod: 14, crossWindow: 0 }),
-    ).toBe("neutral");
+    expect(combinedSignalRef(trimmed, { fastPeriod: 20, slowPeriod: 50, rsiPeriod: 14, crossWindow: 0 })).toBe("buy");
+    expect(combinedSignalRef(prices, { fastPeriod: 20, slowPeriod: 50, rsiPeriod: 14, crossWindow: 0 })).toBe("neutral");
   });
 
   it("skips symbols that return no bar data", async () => {
@@ -404,10 +396,10 @@ describe("MomentumRotationStrategy", () => {
   it("selects top N symbols with buy signals", async () => {
     // Create bars where AAPL, MSFT, GOOG have golden crosses
     const barsBySymbol: Record<string, Bar[]> = {
-      AAPL: goldenCrossBars("AAPL"),
-      MSFT: goldenCrossBars("MSFT"),
-      GOOG: goldenCrossBars("GOOG"),
-      CASH: neutralBars("CASH"), // neutral, not selected
+      "AAPL": goldenCrossBars("AAPL"),
+      "MSFT": goldenCrossBars("MSFT"),
+      "GOOG": goldenCrossBars("GOOG"),
+      "CASH": neutralBars("CASH"),  // neutral, not selected
     };
 
     const marketData = createMockMarketData(barsBySymbol, {
@@ -455,9 +447,9 @@ describe("MomentumRotationStrategy", () => {
   it("sells positions that drop out of top N", async () => {
     // First run: AAPL and MSFT have golden crosses -> both bought
     const barsBySymbol: Record<string, Bar[]> = {
-      AAPL: goldenCrossBars("AAPL"),
-      MSFT: goldenCrossBars("MSFT"),
-      GOOG: neutralBars("GOOG"),
+      "AAPL": goldenCrossBars("AAPL"),
+      "MSFT": goldenCrossBars("MSFT"),
+      "GOOG": neutralBars("GOOG"),
     };
 
     const marketData = createMockMarketData(barsBySymbol, {
@@ -495,9 +487,9 @@ describe("MomentumRotationStrategy", () => {
     // Second run: MSFT drops out (now neutral), GOOG gets golden cross
     // We simulate this by changing the bar data for MSFT and GOOG
     const barsBySymbol2: Record<string, Bar[]> = {
-      AAPL: goldenCrossBars("AAPL"), // still golden cross
-      MSFT: neutralBars("MSFT"), // now neutral -> drops out
-      GOOG: goldenCrossBars("GOOG"), // now golden cross -> enters
+      "AAPL": goldenCrossBars("AAPL"),  // still golden cross
+      "MSFT": neutralBars("MSFT"),      // now neutral -> drops out
+      "GOOG": goldenCrossBars("GOOG"),  // now golden cross -> enters
     };
 
     const marketData2 = createMockMarketData(barsBySymbol2, {
@@ -572,7 +564,7 @@ describe("MomentumRotationStrategy", () => {
 
   it("returns empty result when sub-account is not initialized", async () => {
     const barsBySymbol: Record<string, Bar[]> = {
-      AAPL: goldenCrossBars("AAPL"),
+      "AAPL": goldenCrossBars("AAPL"),
     };
     const marketData = createMockMarketData(barsBySymbol, { AAPL: 100 });
 

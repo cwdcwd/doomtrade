@@ -10,8 +10,14 @@ import { randomUUID } from "node:crypto";
 import express from "express";
 import supertest from "supertest";
 import type { Database } from "../src/db/database.js";
-import { openDatabase, closeDatabase, execRun } from "../src/db/database.js";
-import { SimulatedExchange } from "../src/executor/simulated.js";
+import {
+  openDatabase,
+  closeDatabase,
+  execRun,
+} from "../src/db/database.js";
+import {
+  SimulatedExchange,
+} from "../src/executor/simulated.js";
 import { TradeEngine, type TradeAnalytics } from "../src/engine/trade-engine.js";
 import { DecisionStore } from "../src/decision/decision-store.js";
 import { Portfolio } from "../src/portfolio/portfolio.js";
@@ -275,35 +281,13 @@ describe("Trade History & Performance Analytics (#24)", () => {
       const prices = new Map<string, number>();
       const priceProvider = (symbol: string) => prices.get(symbol) ?? null;
       const decisionStore = new DecisionStore(db);
-      const executor = new SimulatedExchange(db, {
-        initialCash: 100_000,
-        feeRate: 0.001,
-        getCurrentPrice: priceProvider,
-      });
-      const mockConfig: Pick<
-        Config,
-        | "tradeMode"
-        | "maxOpenPositions"
-        | "maxPositionSizePct"
-        | "dailyTradeLimit"
-        | "maxDrawdownPct"
-      > = {
-        tradeMode: "sim",
-        maxOpenPositions: 10,
-        maxPositionSizePct: 20,
-        dailyTradeLimit: 20,
-        maxDrawdownPct: 15,
+      const executor = new SimulatedExchange(db, { initialCash: 100_000, feeRate: 0.001, getCurrentPrice: priceProvider });
+      const mockConfig: Pick<Config, "tradeMode" | "maxOpenPositions" | "maxPositionSizePct" | "dailyTradeLimit" | "maxDrawdownPct"> = {
+        tradeMode: "sim", maxOpenPositions: 10, maxPositionSizePct: 20, dailyTradeLimit: 20, maxDrawdownPct: 15,
       };
       const tradeEngine = new TradeEngine(db, executor, mockConfig);
       const portfolio = new Portfolio(db, executor, { mode: "sim", initialCapital: 100_000 });
-      const state: AppState = {
-        decisionStore,
-        tradeEngine,
-        portfolio,
-        config: mockConfig as Config,
-        currentMode: "sim",
-        modeChangedAt: Date.now(),
-      };
+      const state: AppState = { decisionStore, tradeEngine, portfolio, config: mockConfig as Config, currentMode: "sim", modeChangedAt: Date.now() };
       const app = express();
       app.use(express.json());
       app.use("/api", createApiRouter(state));
@@ -349,35 +333,13 @@ describe("Trade History & Performance Analytics (#24)", () => {
       const prices = new Map<string, number>();
       const priceProvider = (symbol: string) => prices.get(symbol) ?? null;
       const decisionStore = new DecisionStore(db);
-      const executor = new SimulatedExchange(db, {
-        initialCash: 100_000,
-        feeRate: 0.001,
-        getCurrentPrice: priceProvider,
-      });
-      const mockConfig: Pick<
-        Config,
-        | "tradeMode"
-        | "maxOpenPositions"
-        | "maxPositionSizePct"
-        | "dailyTradeLimit"
-        | "maxDrawdownPct"
-      > = {
-        tradeMode: "sim",
-        maxOpenPositions: 10,
-        maxPositionSizePct: 20,
-        dailyTradeLimit: 20,
-        maxDrawdownPct: 15,
+      const executor = new SimulatedExchange(db, { initialCash: 100_000, feeRate: 0.001, getCurrentPrice: priceProvider });
+      const mockConfig: Pick<Config, "tradeMode" | "maxOpenPositions" | "maxPositionSizePct" | "dailyTradeLimit" | "maxDrawdownPct"> = {
+        tradeMode: "sim", maxOpenPositions: 10, maxPositionSizePct: 20, dailyTradeLimit: 20, maxDrawdownPct: 15,
       };
       const tradeEngine = new TradeEngine(db, executor, mockConfig);
       const portfolio = new Portfolio(db, executor, { mode: "sim", initialCapital: 100_000 });
-      const state: AppState = {
-        decisionStore,
-        tradeEngine,
-        portfolio,
-        config: mockConfig as Config,
-        currentMode: "sim",
-        modeChangedAt: Date.now(),
-      };
+      const state: AppState = { decisionStore, tradeEngine, portfolio, config: mockConfig as Config, currentMode: "sim", modeChangedAt: Date.now() };
       const app = express();
       app.use(express.json());
       app.use("/api", createApiRouter(state));
@@ -400,9 +362,7 @@ describe("Trade History & Performance Analytics (#24)", () => {
       insertTrade({ timestamp: "2026-09-07T10:00:00Z" });
 
       const { app } = createApp(db);
-      const resp = await supertest(app).get(
-        "/api/trades?startDate=2026-09-02&endDate=2026-09-05T23:59:59Z",
-      );
+      const resp = await supertest(app).get("/api/trades?startDate=2026-09-02&endDate=2026-09-05T23:59:59Z");
       expect(resp.status).toBe(200);
       expect(resp.body.trades).toHaveLength(1);
     });

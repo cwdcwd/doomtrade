@@ -17,12 +17,10 @@ vi.mock("pg", () => {
     query: (...args: unknown[]) => queryMock(...args),
     release: () => releaseMock(),
   };
-  const Pool = vi.fn().mockImplementation(function () {
-    return {
-      connect: async () => client,
-      end: async () => endMock(),
-    };
-  });
+  const Pool = vi.fn().mockImplementation(function () { return {
+    connect: async () => client,
+    end: async () => endMock(),
+  }; });
   return { Pool };
 });
 

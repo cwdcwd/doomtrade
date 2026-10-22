@@ -125,10 +125,8 @@ describe("RSI", () => {
 
   it("produces a value in [0, 100] range", () => {
     // Random-ish prices
-    const values = [
-      44, 44.34, 44.09, 43.61, 44.33, 44.83, 45.1, 45.42, 45.84, 46.08, 45.89, 46.03, 45.61, 46.28,
-      46.28, 46.0,
-    ];
+    const values = [44, 44.34, 44.09, 43.61, 44.33, 44.83, 45.10, 45.42,
+      45.84, 46.08, 45.89, 46.03, 45.61, 46.28, 46.28, 46.00];
     const result = rsi(values, 14);
     expect(result).not.toBeNull();
     expect(result!).toBeGreaterThanOrEqual(0);
@@ -140,7 +138,8 @@ describe("RSI", () => {
     // Classic RSI test: 14 daily closes
     // Using data that produces a known RSI around 50-70
     const values = [
-      45.0, 46.0, 45.5, 46.5, 47.0, 46.8, 47.2, 47.5, 47.3, 47.8, 48.0, 47.9, 48.1, 48.2, 48.3,
+      45.00, 46.00, 45.50, 46.50, 47.00, 46.80, 47.20, 47.50,
+      47.30, 47.80, 48.00, 47.90, 48.10, 48.20, 48.30,
     ];
     const result = rsi(values, 14);
     expect(result).not.toBeNull();
@@ -226,9 +225,8 @@ describe("rsiSignal", () => {
 
   it("returns neutral in normal range", () => {
     // Alternating around a midpoint
-    const prices = [
-      50, 50.5, 49.5, 50.2, 49.8, 50.1, 49.9, 50.3, 49.7, 50.0, 50.2, 49.8, 50.1, 49.9, 50.0, 50.1,
-    ];
+    const prices = [50, 50.5, 49.5, 50.2, 49.8, 50.1, 49.9, 50.3, 49.7, 50.0,
+      50.2, 49.8, 50.1, 49.9, 50.0, 50.1];
     const signal = rsiSignal(prices, 14);
     expect(signal).toBe("neutral");
   });

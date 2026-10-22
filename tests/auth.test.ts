@@ -66,7 +66,10 @@ describe("API auth policy — public reads, keyed writes", () => {
     });
 
     it("POST /api/agents accepts X-API-Key header", async () => {
-      const res = await request(app).post("/api/agents").set("X-API-Key", KEY).send({});
+      const res = await request(app)
+        .post("/api/agents")
+        .set("X-API-Key", KEY)
+        .send({});
       expect(res.status).toBe(201);
     });
 
@@ -108,7 +111,10 @@ describe("API auth policy — public reads, keyed writes", () => {
     });
 
     it("rejects malformed Authorization header on mutations", async () => {
-      const res = await request(app).post("/api/trade").set("Authorization", "Token abc").send({});
+      const res = await request(app)
+        .post("/api/trade")
+        .set("Authorization", "Token abc")
+        .send({});
       expect(res.status).toBe(401);
     });
 
