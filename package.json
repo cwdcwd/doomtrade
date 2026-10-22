@@ -33,7 +33,7 @@
   "devDependencies": {
     "@eslint/js": "^10.0.1",
     "@types/express": "^5.0.0",
-    "@types/helmet": "^0.0.48",
+    "@types/helmet": "^4.0.0",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.23.1",
     "@types/sql.js": "^1.4.0",
