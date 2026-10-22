@@ -14,19 +14,19 @@ const ccxtGetQuote = vi.fn();
 const ccxtGetSnapshot = vi.fn();
 
 vi.mock("../src/market/alpaca-data.js", () => ({
-  AlpacaMarketData: vi.fn().mockImplementation(() => ({
+  AlpacaMarketData: vi.fn().mockImplementation(function () { return {
     getQuote: alpacaGetQuote,
     getBars: vi.fn(async () => []),
     getSnapshot: alpacaGetSnapshot,
-  })),
+  }; }),
 }));
 
 vi.mock("../src/market/ccxt-data.js", () => ({
-  CCXTMarketData: vi.fn().mockImplementation(() => ({
+  CCXTMarketData: vi.fn().mockImplementation(function () { return {
     getQuote: ccxtGetQuote,
     getBars: vi.fn(async () => []),
     getSnapshot: ccxtGetSnapshot,
-  })),
+  }; }),
 }));
 
 const { createMarketDataService, createPublicCryptoMarketData } =

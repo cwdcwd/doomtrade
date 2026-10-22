@@ -12,10 +12,10 @@ const mockNotify = vi.fn().mockResolvedValue(undefined);
 const mockSendMessage = vi.fn().mockResolvedValue(undefined);
 
 vi.mock("@cwdcwd/agent-bridge", () => ({
-  A2AClient: vi.fn().mockImplementation(() => ({
+  A2AClient: vi.fn().mockImplementation(function () { return {
     notify: mockNotify,
     sendMessage: mockSendMessage,
-  })),
+  }; }),
 }));
 
 // ── Helpers ─────────────────────────────────────────────────────

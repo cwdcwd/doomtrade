@@ -18,12 +18,12 @@ const alpacaCancelOrder = vi.fn();
 const alpacaGetPositions = vi.fn();
 const alpacaGetAccount = vi.fn();
 
-const AlpacaMock = vi.fn().mockImplementation(() => ({
+const AlpacaMock = vi.fn().mockImplementation(function () { return {
   submitOrder: alpacaSubmitOrder,
   cancelOrder: alpacaCancelOrder,
   getPositions: alpacaGetPositions,
   getAccount: alpacaGetAccount,
-}));
+}; });
 
 vi.mock("@alpacahq/alpaca-trade-api", () => ({
   Alpaca: AlpacaMock,
@@ -35,14 +35,14 @@ const ccxtCancelOrder = vi.fn();
 const ccxtFetchPositions = vi.fn();
 const ccxtFetchBalance = vi.fn();
 
-const BinanceMock = vi.fn().mockImplementation(() => ({
+const BinanceMock = vi.fn().mockImplementation(function () { return {
   apiKey: "",
   secret: "",
   createOrder: ccxtCreateOrder,
   cancelOrder: ccxtCancelOrder,
   fetchPositions: ccxtFetchPositions,
   fetchBalance: ccxtFetchBalance,
-}));
+}; });
 
 vi.mock("ccxt", () => ({
   binance: BinanceMock,
