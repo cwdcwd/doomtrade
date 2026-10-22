@@ -346,6 +346,17 @@ describe("CongressTradesSignalSource", () => {
 // ── CongressFollowerStrategy ────────────────────────────────────
 
 describe("CongressFollowerStrategy", () => {
+  // Fixtures use fixed disclosure dates; pin "now" so they stay within
+  // maxSignalAgeDays instead of aging out as real time passes.
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-09-20T12:00:00Z"));
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   function buildContext(themeId: string): ThemeContext {
     return {
       db,
